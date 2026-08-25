@@ -1,40 +1,50 @@
 import { Link } from "react-router-dom";
 
 export default function Footer() {
+  const col = "text-sm text-white/55 hover:text-white transition";
+
   return (
-    <footer className="mt-24 border-t border-sand-300 bg-white">
-      <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
+    <footer className="border-t border-white/8 bg-night-900">
+      <div className="mx-auto grid max-w-7xl gap-10 px-6 py-16 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <span className="text-lg font-bold text-brand-600">Roamie</span>
-          <p className="mt-2 text-sm text-ink/60">
+          <span className="font-display text-lg font-extrabold tracking-tight text-white"
+                style={{ fontVariationSettings: '"wdth" 92' }}>
+            ROAMIE
+          </span>
+          <p className="mt-3 max-w-xs text-sm text-white/50">
             Travel Sri Lanka your way — your guide, your driver, your pace.
           </p>
         </div>
+
         <div>
-          <h4 className="text-sm font-semibold">Explore</h4>
-          <ul className="mt-3 space-y-2 text-sm text-ink/70">
-            <li><Link to="/destinations" className="hover:text-brand-600">Destinations</Link></li>
-            <li><Link to="/packages" className="hover:text-brand-600">Packages</Link></li>
-            <li><Link to="/plan" className="hover:text-brand-600">AI Trip Planner</Link></li>
+          <h4 className="eyebrow text-saffron-400">Explore</h4>
+          <ul className="mt-4 space-y-2.5">
+            <li><Link to="/destinations" className={col}>Destinations</Link></li>
+            <li><Link to="/packages" className={col}>Packages</Link></li>
+            <li><Link to="/plan" className={col}>AI trip planner</Link></li>
           </ul>
         </div>
+
         <div>
-          <h4 className="text-sm font-semibold">Work with us</h4>
-          <ul className="mt-3 space-y-2 text-sm text-ink/70">
-            <li><Link to="/register" className="hover:text-brand-600">Become a guide</Link></li>
-            <li><Link to="/register" className="hover:text-brand-600">Become a driver</Link></li>
+          <h4 className="eyebrow text-saffron-400">Work with us</h4>
+          <ul className="mt-4 space-y-2.5">
+            <li><Link to="/guides" className={col}>Browse guides</Link></li>
+            <li><Link to="/drivers" className={col}>Browse drivers</Link></li>
+            <li><Link to="/register" className={col}>Become a provider</Link></li>
           </ul>
         </div>
+
         <div>
-          <h4 className="text-sm font-semibold">Support</h4>
-          <ul className="mt-3 space-y-2 text-sm text-ink/70">
+          <h4 className="eyebrow text-saffron-400">Support</h4>
+          <ul className="mt-4 space-y-2.5 text-sm text-white/55">
             <li>help@roamie.lk</li>
             <li>Negombo, Sri Lanka</li>
           </ul>
         </div>
       </div>
-      <div className="border-t border-sand-300 py-4 text-center text-xs text-ink/50">
-        © {new Date().getFullYear()} Roamie. Built as an HND final project.
+
+      <div className="border-t border-white/8 py-5 text-center text-xs text-white/35">
+        © {new Date().getFullYear()} Roamie
       </div>
     </footer>
   );

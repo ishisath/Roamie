@@ -124,9 +124,19 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
             _check_provider(db, item.provider_id, role)
             _check_availability(db, item.provider_id, data.start_date, data.end_date)
 
-            if item.amount is None:
-                raise HTTPException(400, f"Amount required for {st} booking")
-            amount = Decimal(str(item.amount))
+            profile = (db.query(GuideProfile).filter_by(user_id=item.provider_id).first()
+                       if st == ServiceType.GUIDE
+                       else db.query(DriverProfile).filter_by(user_id=item.provider_id).first())
+
+            rate = Decimal(str(profile.daily_rate or 0)) if profile else Decimal("0")
+            days = ((data.end_date - data.start_date).days + 1) if data.end_date else 1
+
+            if rate > 0:
+                amount = rate * days          # server decides the price
+            elif item.amount is not None:
+                amount = Decimal(str(item.amount))
+            else:
+                raise HTTPException(400, f"No rate set for this {st.lower()}")
 
             vehicle_id = None
             if st == ServiceType.DRIVER and item.vehicle_id:

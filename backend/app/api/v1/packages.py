@@ -148,3 +148,37 @@ def deactivate_package(package_id: str,
         raise HTTPException(403, "Not your package")
     pkg.status = ContentStatus.INACTIVE
     db.commit()
+
+from app.models.package import PackageDate, PackagePhoto
+from app.schemas.package import PhotoIn
+from datetime import date as date_type
+
+
+@router.post("/{package_id}/photos", status_code=201)
+def add_photo(package_id: str, data: PhotoIn,
+              user: User = Depends(get_verified_provider),
+              db: Session = Depends(get_db)):
+    profile = db.query(GuideProfile).filter_by(user_id=user.id).first()
+    pkg = db.query(Package).filter_by(id=package_id).first()
+    if not pkg or pkg.guide_id != profile.id:
+        raise HTTPException(404, "Package not found")
+    photo = PackagePhoto(package_id=pkg.id, url=data.url, sort_order=data.sort_order)
+    db.add(photo)
+    db.commit()
+    return {"id": str(photo.id), "url": photo.url}
+
+
+@router.post("/{package_id}/dates", status_code=201)
+def add_date(package_id: str, start_date: date_type, end_date: date_type,
+             slots: int = 10,
+             user: User = Depends(get_verified_provider),
+             db: Session = Depends(get_db)):
+    profile = db.query(GuideProfile).filter_by(user_id=user.id).first()
+    pkg = db.query(Package).filter_by(id=package_id).first()
+    if not pkg or pkg.guide_id != profile.id:
+        raise HTTPException(404, "Package not found")
+    d = PackageDate(package_id=pkg.id, start_date=start_date,
+                    end_date=end_date, slots_total=slots)
+    db.add(d)
+    db.commit()
+    return {"id": str(d.id)}

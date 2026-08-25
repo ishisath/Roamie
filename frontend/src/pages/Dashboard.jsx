@@ -169,6 +169,15 @@ export default function Dashboard() {
                   <Link to="/budget" className="block text-brand-600 hover:underline">
   Track my budget
 </Link>
+
+<Link to="/reviews" className="block text-brand-600 hover:underline">
+  Write a review
+</Link>
+
+<Link to="/requests" className="block text-brand-600 hover:underline">
+  Post a trip request
+</Link>
+
                 </div>
               </div>
             )}

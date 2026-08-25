@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { packagesApi, destinationsApi } from "../api/endpoints";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import PackageCard from "../components/PackageCard";
+import PhotoCard from "../components/PhotoCard";
+import { usePointer } from "../hooks/useTilt";
 
 const SORTS = [
   { v: "popular", l: "Most popular" },
@@ -18,6 +19,7 @@ export default function Packages() {
   const [destinations, setDestinations] = useState([]);
   const [data, setData] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
+  const pointer = usePointer();
 
   const destination = params.get("destination") || "";
   const sort = params.get("sort") || "popular";
@@ -28,8 +30,7 @@ export default function Packages() {
 
   useEffect(() => {
     destinationsApi.search({ size: 50 })
-      .then((r) => setDestinations(r.data.items))
-      .catch(() => {});
+      .then((r) => setDestinations(r.data.items)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -59,43 +60,58 @@ export default function Packages() {
   const clearAll = () => setParams(new URLSearchParams());
   const hasFilters = destination || maxPrice || duration || transport;
   const pages = Math.ceil(data.total / 12);
+  const bannerImage = data.items[0]?.photos?.[0]?.url;
 
   const selectCls =
-    "w-full rounded-lg border border-sand-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500";
+    "w-full rounded-lg border border-white/12 bg-night-800 px-3 py-2 text-sm text-white outline-none focus:border-saffron-400";
 
   return (
-    <div className="min-h-screen">
-      <Navbar />
+    <div className="bg-night-900">
+      <Navbar overlay />
 
-      <div className="border-b border-sand-300 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <h1 className="text-3xl font-semibold">Tour packages</h1>
-          <p className="mt-1 text-ink/60">
-            {data.total} package{data.total === 1 ? "" : "s"} from verified guides
+      <section className="relative h-[24rem] overflow-hidden">
+        <div
+          className="absolute inset-0 scale-110"
+          style={{
+            transform: `translate3d(${pointer.x * -14}px, ${pointer.y * -10}px, 0) scale(1.1)`,
+            transition: "transform 500ms cubic-bezier(0.22,1,0.36,1)",
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-700 to-night-900" />
+          {bannerImage && (
+            <img src={bannerImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          )}
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-night-900 via-night-900/70 to-night-900/40" />
+
+        <div className="relative mx-auto flex h-full max-w-7xl flex-col justify-end px-6 pb-12">
+          <span className="eyebrow text-saffron-400">Curated by verified guides</span>
+          <h1 className="headline mt-3 text-[clamp(2.5rem,6vw,4.5rem)] uppercase text-white">
+            Packages
+          </h1>
+          <p className="mt-2 text-white/60">
+            {data.total} package{data.total === 1 ? "" : "s"} — transport details shown before you book.
           </p>
         </div>
-      </div>
+      </section>
 
-      <main className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-4">
-        <aside className="space-y-5 lg:col-span-1">
-          <div className="rounded-xl border border-sand-300 bg-white p-5">
+      <main className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-4">
+        <aside className="lg:col-span-1">
+          <div className="sticky top-24 rounded-[18px] border border-white/10 bg-night-800/70 p-5">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Filters</h2>
+              <h2 className="font-display font-semibold text-white">Filters</h2>
               {hasFilters && (
-                <button onClick={clearAll} className="text-xs text-brand-600 hover:underline">
+                <button onClick={clearAll} className="text-xs text-saffron-400 hover:underline">
                   Clear
                 </button>
               )}
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="mt-5 space-y-4">
               <div>
-                <label className="text-sm font-medium">Destination</label>
-                <select
-                  value={destination}
-                  onChange={(e) => update("destination", e.target.value)}
-                  className={`mt-1 ${selectCls}`}
-                >
+                <label className="eyebrow text-white/50">Destination</label>
+                <select value={destination} onChange={(e) => update("destination", e.target.value)}
+                        className={`mt-1.5 ${selectCls}`}>
                   <option value="">All destinations</option>
                   {destinations.map((d) => (
                     <option key={d.id} value={d.slug}>{d.name}</option>
@@ -104,12 +120,9 @@ export default function Packages() {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Max price (LKR)</label>
-                <select
-                  value={maxPrice}
-                  onChange={(e) => update("max_price", e.target.value)}
-                  className={`mt-1 ${selectCls}`}
-                >
+                <label className="eyebrow text-white/50">Max price</label>
+                <select value={maxPrice} onChange={(e) => update("max_price", e.target.value)}
+                        className={`mt-1.5 ${selectCls}`}>
                   <option value="">Any price</option>
                   <option value="15000">Under 15,000</option>
                   <option value="25000">Under 25,000</option>
@@ -118,12 +131,9 @@ export default function Packages() {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Duration</label>
-                <select
-                  value={duration}
-                  onChange={(e) => update("duration", e.target.value)}
-                  className={`mt-1 ${selectCls}`}
-                >
+                <label className="eyebrow text-white/50">Duration</label>
+                <select value={duration} onChange={(e) => update("duration", e.target.value)}
+                        className={`mt-1.5 ${selectCls}`}>
                   <option value="">Any length</option>
                   <option value="1">1 day</option>
                   <option value="2">2 days</option>
@@ -132,12 +142,9 @@ export default function Packages() {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Transport</label>
-                <select
-                  value={transport}
-                  onChange={(e) => update("transport_included", e.target.value)}
-                  className={`mt-1 ${selectCls}`}
-                >
+                <label className="eyebrow text-white/50">Transport</label>
+                <select value={transport} onChange={(e) => update("transport_included", e.target.value)}
+                        className={`mt-1.5 ${selectCls}`}>
                   <option value="">Any</option>
                   <option value="true">Included</option>
                   <option value="false">Not included</option>
@@ -152,36 +159,49 @@ export default function Packages() {
             <select
               value={sort}
               onChange={(e) => update("sort", e.target.value)}
-              className="rounded-lg border border-sand-300 bg-white px-3 py-1.5 text-sm outline-none"
+              className="rounded-full border border-white/15 bg-night-800 px-4 py-1.5 text-sm text-white outline-none"
             >
               {SORTS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
             </select>
           </div>
 
           {loading ? (
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-72 animate-pulse rounded-xl bg-sand-100" />
+                <div key={i} className="h-72 animate-pulse rounded-[18px] bg-night-800" />
               ))}
             </div>
           ) : data.items.length === 0 ? (
-            <p className="mt-16 text-center text-ink/60">
-              No packages match these filters.
+            <p className="mt-20 text-center text-white/50">
+              No packages match these filters. Try widening your price or duration.
             </p>
           ) : (
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {data.items.map((p) => <PackageCard key={p.id} p={p} />)}
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {data.items.map((p) => (
+                <PhotoCard
+                  key={p.id}
+                  to={`/packages/${p.id}`}
+                  image={p.photos?.[0]?.url}
+                  kicker={`${p.duration_days} day${p.duration_days > 1 ? "s" : ""}${
+                    p.transport_included ? " · transport" : ""
+                  }`}
+                  title={p.title}
+                  meta={`${p.currency} ${Number(p.price).toLocaleString()} per person`}
+                />
+              ))}
             </div>
           )}
 
           {pages > 1 && (
-            <div className="mt-10 flex justify-center gap-2">
+            <div className="mt-12 flex justify-center gap-2">
               {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}
                   onClick={() => update("page", String(n))}
-                  className={`h-9 w-9 rounded-lg text-sm ${
-                    n === page ? "bg-brand-600 text-white" : "border border-sand-300 bg-white"
+                  className={`h-10 w-10 rounded-full text-sm transition ${
+                    n === page
+                      ? "bg-saffron-500 text-night-900"
+                      : "border border-white/15 text-white/60 hover:text-white"
                   }`}
                 >
                   {n}

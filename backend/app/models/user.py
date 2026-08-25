@@ -55,6 +55,7 @@ class GuideProfile(Base, TimestampMixin):
     admin_note = Column(Text)
     rating_avg = Column(Numeric(3, 2), default=0)
     rating_count = Column(Integer, default=0)
+    daily_rate = Column(Numeric(10, 2), default=0)
 
     user = relationship("User", back_populates="guide_profile")
 
@@ -75,6 +76,7 @@ class DriverProfile(Base, TimestampMixin):
     admin_note = Column(Text)
     rating_avg = Column(Numeric(3, 2), default=0)
     rating_count = Column(Integer, default=0)
+    daily_rate = Column(Numeric(10, 2), default=0)
 
     user = relationship("User", back_populates="driver_profile")
     vehicles = relationship("Vehicle", back_populates="driver")

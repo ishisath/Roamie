@@ -21,6 +21,9 @@ export const packagesApi = {
   detail: (id) => client.get(`/packages/${id}`),
   mine: () => client.get("/packages/mine"),
   create: (data) => client.post("/packages", data),
+  update: (id, data) => client.patch(`/packages/${id}`, data),
+  deactivate: (id) => client.delete(`/packages/${id}`),
+  addPhoto: (id, url) => client.post(`/packages/${id}/photos`, { url }),
 };
 
 export const bookingsApi = {
@@ -28,6 +31,8 @@ export const bookingsApi = {
   list: (params) => client.get("/bookings", { params }),
   detail: (id) => client.get(`/bookings/${id}`),
   cancel: (id, reason) => client.post(`/bookings/${id}/cancel`, { reason }),
+  tripStatus: (itemId, status, note) =>
+    client.patch(`/bookings/items/${itemId}/trip-status`, { status, note }),
 };
 
 export const paymentsApi = {
@@ -59,4 +64,86 @@ export const budgetApi = {
   summary: (id) => client.get(`/budget/${id}`),
   addExpense: (id, data) => client.post(`/budget/${id}/expenses`, data),
   deleteExpense: (id) => client.delete(`/budget/expenses/${id}`),
+};
+
+export const availabilityApi = {
+  mine: () => client.get("/availability/me"),
+  set: (dates, status) => client.put("/availability/me", { dates, status }),
+};
+
+export const messagesApi = {
+  threads: () => client.get("/messages/threads"),
+  list: (bookingId) => client.get(`/messages/${bookingId}`),
+  send: (bookingId, body) => client.post(`/messages/${bookingId}`, { body }),
+  unreadCount: () => client.get("/messages/unread/count"),
+};
+
+export const vehiclesApi = {
+  mine: () => client.get("/vehicles/mine"),
+  create: (data) => client.post("/vehicles", data),
+  update: (id, data) => client.patch(`/vehicles/${id}`, data),
+  deactivate: (id) => client.delete(`/vehicles/${id}`),
+};
+
+export const adminApi = {
+  analytics: () => client.get("/admin/analytics"),
+  users: (params) => client.get("/admin/users", { params }),
+  setUserStatus: (id, is_active, note) =>
+    client.patch(`/admin/users/${id}/status`, { is_active, note }),
+
+  pendingGuides: () => client.get("/admin/verifications/guides"),
+  pendingDrivers: () => client.get("/admin/verifications/drivers"),
+  pendingVehicles: () => client.get("/admin/verifications/vehicles"),
+  verifyGuide: (id, action, note) =>
+    client.patch(`/admin/verifications/guides/${id}`, { action, note }),
+  verifyDriver: (id, action, note) =>
+    client.patch(`/admin/verifications/drivers/${id}`, { action, note }),
+  verifyVehicle: (id, action, note) =>
+    client.patch(`/admin/verifications/vehicles/${id}`, { action, note }),
+
+  suggestions: (status) => client.get("/admin/suggestions", { params: { status } }),
+  reviewSuggestion: (id, action, note) =>
+    client.patch(`/admin/suggestions/${id}`, { action, note }),
+
+  setFlags: (id, params) =>
+    client.patch(`/admin/destinations/${id}/flags`, null, { params }),
+  bookings: (params) => client.get("/admin/bookings", { params }),
+  payments: (params) => client.get("/admin/payments", { params }),
+  reports: (status) => client.get("/admin/reports", { params: { status } }),
+  resolveReport: (id, status, admin_note) =>
+    client.patch(`/admin/reports/${id}`, { status, admin_note }),
+};
+
+export const suggestionsApi = {
+  create: (data) => client.post("/suggestions", data),
+  mine: () => client.get("/suggestions/mine"),
+};
+
+export const reportsApi = {
+  create: (data) => client.post("/reports", data),
+};
+
+
+
+export const reviewsApi = {
+  pending: () => client.get("/reviews/pending"),
+  create: (data) => client.post("/reviews", data),
+  forSubject: (type, id) => client.get(`/reviews/subject/${type}/${id}`),
+  mine: () => client.get("/reviews/mine"),
+};
+
+export const providersApi = {
+  guides: (params) => client.get("/providers/guides", { params }),
+  drivers: (params) => client.get("/providers/drivers", { params }),
+  profile: (userId) => client.get(`/providers/${userId}`),
+};
+
+export const bidsApi = {
+  createRequest: (data) => client.post("/requests", data),
+  myRequests: () => client.get("/requests/mine"),
+  closeRequest: (id) => client.delete(`/requests/${id}`),
+  openRequests: () => client.get("/requests"),
+  submitBid: (requestId, data) => client.post(`/requests/${requestId}/bids`, data),
+  acceptBid: (bidId) => client.post(`/bids/${bidId}/accept`),
+  myBids: () => client.get("/bids/mine"),
 };

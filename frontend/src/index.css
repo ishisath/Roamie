@@ -1,20 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=Instrument+Sans:wght@400..600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-brand-50:  #eef7f4;
-  --color-brand-100: #d3ebe3;
-  --color-brand-500: #0f766e;
-  --color-brand-600: #0d635c;
-  --color-brand-700: #0b524c;
-  --color-sand-50:   #fbf8f3;
-  --color-sand-100:  #f5efe4;
-  --color-sand-300:  #e2d5bd;
-  --color-ink:       #1c2321;
+  /* Paper — work surfaces */
+  --color-sand-50:  #F6F3EC;
+  --color-sand-100: #EBE6D9;
+  --color-sand-200: #DFD8C6;
+  --color-sand-300: #D2C9B3;
+
+  /* Night — public surfaces */
+  --color-night-900: #0C120F;
+  --color-night-800: #131C18;
+  --color-night-700: #1E2B24;
+  --color-night-600: #2C3D34;
+
+  /* Ink */
+  --color-ink:     #14201B;
+  --color-ink-soft:#4A5952;
+
+  /* Ceylon tea green */
+  --color-brand-50:  #E7F0EB;
+  --color-brand-100: #C6DDD1;
+  --color-brand-200: #9CC4B2;
+  --color-brand-500: #1B5E4A;
+  --color-brand-600: #14523F;
+  --color-brand-700: #0D3E30;
+
+  /* Saffron — the accent, used sparingly */
+  --color-saffron-100: #FBECD1;
+  --color-saffron-400: #F0B44A;
+  --color-saffron-500: #E39A22;
+  --color-saffron-600: #C07B10;
+
+  --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-card: 14px;
 }
 
-body {
-  margin: 0;
+@layer base {
+  body {
+    margin: 0;
+    background: var(--color-sand-50);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+    font-variation-settings: "wdth" 100;
+  }
+
+  /* Display headlines stretch wide — editorial, like a poster */
+  .headline {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 112;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+  }
+
+  .eyebrow {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 88;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.6875rem;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-saffron-500);
+    outline-offset: 2px;
+  }
+}
+
+/* The rail — station dots on a track. Sequences only. */
+.rail {
+  position: relative;
+  padding-left: 1.75rem;
+}
+.rail::before {
+  content: "";
+  position: absolute;
+  left: 0.3125rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--color-sand-300) 0 6px,
+    transparent 6px 10px
+  );
+}
+.rail-stop::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
   background: var(--color-sand-50);
-  color: var(--color-ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  border: 2px solid var(--color-brand-500);
+  margin-top: 0.375rem;
+}
+.rail-stop--done::before {
+  background: var(--color-brand-500);
+}
+.rail-stop--next::before {
+  border-color: var(--color-saffron-500);
+  background: var(--color-saffron-100);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.map-dark .leaflet-tile {
+  filter: grayscale(0.7) invert(0.92) hue-rotate(175deg) brightness(0.92) contrast(0.9);
+}
+.map-dark .leaflet-container {
+  background: var(--color-night-800);
+}
+.map-dark .leaflet-control-attribution {
+  background: rgba(12, 18, 15, 0.75);
+  color: rgba(255, 255, 255, 0.5);
+}
+.map-dark .leaflet-control-attribution a { color: rgba(255, 255, 255, 0.7); }
+
+@keyframes slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }

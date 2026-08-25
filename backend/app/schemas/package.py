@@ -76,3 +76,7 @@ class PackageCreate(BaseModel):
     dropoff_info: str | None = None
     driver_info: str | None = None
     extra_transport_cost: Decimal = Decimal("0")
+
+class PhotoIn(BaseModel):
+    url: str
+    sort_order: int = 0
