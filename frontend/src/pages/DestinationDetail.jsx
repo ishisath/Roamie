@@ -6,6 +6,7 @@ import Footer from "../components/Footer";
 import MapView from "../components/MapView";
 import PhotoCard from "../components/PhotoCard";
 import { useParallax, usePointer } from "../hooks/useTilt";
+import AskAssistant from "../components/AskAssistant";
 
 function Chips({ title, items, tone = "default" }) {
   if (!items?.length) return null;
@@ -261,7 +262,8 @@ export default function DestinationDetail() {
           </div>
         </section>
       )}
-
+      <AskAssistant contextType="DESTINATION" contextId={d.id} label="Ask about this place" />
+      <Footer />
       <Footer />
     </div>
   );

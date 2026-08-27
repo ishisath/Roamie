@@ -29,6 +29,9 @@ export default function BookProvider() {
   const [booking, setBooking] = useState(null);
   const [intent, setIntent] = useState(null);
 
+  const [wantBudget, setWantBudget] = useState(true);
+  const [budgetTotal, setBudgetTotal] = useState("");
+
   const [form, setForm] = useState({
     start_date: "",
     end_date: "",
@@ -53,7 +56,6 @@ export default function BookProvider() {
       aiApi.planDetail(planId)
         .then((r) => {
           setPlan(r.data);
-          // prefill dates and destination from the plan
           setForm((f) => ({
             ...f,
             start_date: f.start_date || r.data.start_date || "",
@@ -77,6 +79,12 @@ export default function BookProvider() {
   const secondCost = second ? Number(second.daily_rate || 0) * days : 0;
   const total = primaryCost + secondCost;
 
+  // suggest a budget with headroom for spending on the ground
+  useEffect(() => {
+    if (!total) return;
+    setBudgetTotal(String(Math.round(total * 1.4)));
+  }, [total]);
+
   const createBooking = async () => {
     setError("");
     setBusy(true);
@@ -94,6 +102,7 @@ export default function BookProvider() {
         pickup_location: form.pickup_location || null,
         dropoff_location: form.dropoff_location || null,
         notes: form.notes || null,
+        budget_total: wantBudget && budgetTotal ? Number(budgetTotal) : null,
         items,
       });
       setBooking(data);
@@ -334,6 +343,45 @@ export default function BookProvider() {
               </div>
             </div>
 
+            {/* budget */}
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={wantBudget}
+                  onChange={(e) => setWantBudget(e.target.checked)}
+                  className="mt-1 accent-brand-600"
+                />
+                <span>
+                  <span className="block font-display font-semibold">
+                    Track a budget for this trip
+                  </span>
+                  <span className="mt-0.5 block text-sm text-ink-soft">
+                    Roamie creates a budget for this booking and logs what you've paid.
+                    Add food, tips and anything else as you go.
+                  </span>
+                </span>
+              </label>
+
+              {wantBudget && (
+                <div className="mt-5 border-t border-sand-200 pt-5">
+                  <label className="eyebrow text-ink-soft">
+                    Total budget for this trip (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    value={budgetTotal}
+                    onChange={(e) => setBudgetTotal(e.target.value)}
+                    className={field}
+                  />
+                  <p className="mt-2 text-xs text-ink-soft">
+                    The booking costs LKR {total.toLocaleString()}. We've suggested a
+                    little extra for spending on the ground — change it to whatever suits.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={createBooking}
               disabled={busy || !form.start_date}
@@ -362,7 +410,7 @@ export default function BookProvider() {
                 <p className="font-medium">Demo payment</p>
                 <p className="mt-1 text-ink-soft">
                   Simulated gateway — no card details, no money moves. A real payment
-                  record is written, and the amount is added to your budget.
+                  record is written to the database.
                 </p>
               </div>
 
@@ -397,18 +445,32 @@ export default function BookProvider() {
             </p>
             <p className="mt-3 font-mono text-sm text-ink-soft">{booking.reference}</p>
 
-            {plan && (
-              <p className="mx-auto mt-5 max-w-sm rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">
-                Your itinerary “{plan.title}” has been shared with{" "}
-                {second ? "both providers" : provider.full_name.split(" ")[0]}.
-              </p>
-            )}
+            <div className="mx-auto mt-5 max-w-sm space-y-2">
+              {plan && (
+                <p className="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">
+                  Your itinerary “{plan.title}” has been shared with{" "}
+                  {second ? "both providers" : provider.full_name.split(" ")[0]}.
+                </p>
+              )}
+              {wantBudget && budgetTotal && (
+                <p className="rounded-xl bg-saffron-50 px-4 py-3 text-sm text-saffron-600">
+                  A budget of LKR {Number(budgetTotal).toLocaleString()} is set up for
+                  this trip, with what you paid already logged.
+                </p>
+              )}
+            </div>
 
             <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link to="/dashboard"
                     className="rounded-full bg-brand-600 px-6 py-3 font-medium text-white hover:bg-brand-700">
                 View my trips
               </Link>
+              {wantBudget && budgetTotal && (
+                <Link to="/budget"
+                      className="rounded-full border border-sand-300 px-6 py-3 font-medium hover:bg-sand-100">
+                  Open the budget
+                </Link>
+              )}
               <Link to={`/messages/${booking.id}`}
                     className="rounded-full border border-sand-300 px-6 py-3 font-medium hover:bg-sand-100">
                 Message them

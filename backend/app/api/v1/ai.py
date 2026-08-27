@@ -104,5 +104,8 @@ def check_drift(plan_id: UUID,
 def ask(req: AskRequest,
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db)):
-    answer = assistant_service.ask(db, user, req.question, req.trip_plan_id)
+    answer = assistant_service.ask(
+        db, user, req.question, req.trip_plan_id,
+        req.context_type, req.context_id,
+    )
     return AskResponse(answer=answer)

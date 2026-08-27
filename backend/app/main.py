@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (admin, ai, auth, availability, bids, bookings, budget,
                         destinations, messages, notifications, packages,
-                        payments, providers, reviews, suggestions, vehicles)
+                        payments, providers, reviews, suggestions, vehicles,
+                        weather)
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -32,6 +33,7 @@ app.include_router(suggestions.router, prefix=settings.API_V1)
 app.include_router(reviews.router, prefix=settings.API_V1)
 app.include_router(providers.router, prefix=settings.API_V1)
 app.include_router(bids.router, prefix=settings.API_V1)
+app.include_router(weather.router, prefix=settings.API_V1)
 
 
 @app.get("/health")

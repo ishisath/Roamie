@@ -45,6 +45,9 @@ export default function Navbar({ overlay = false }) {
           <Link to="/guides" className={link}>Guides</Link>
           <Link to="/drivers" className={link}>Drivers</Link>
           <Link to="/plan" className={link}>Plan with AI</Link>
+                    {user?.role === "TRAVELER" && (
+            <Link to="/plans" className={link}>My plans</Link>
+          )}
           {user?.role === "TRAVELER" && <Link to="/budget" className={link}>Budget</Link>}
           {user && <Link to="/messages" className={link}>Messages</Link>}
         </nav>

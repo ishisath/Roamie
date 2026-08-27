@@ -23,6 +23,10 @@ from app.schemas.admin import (AdminUserOut, AnalyticsOut, ReportAction,
                                ReportOut, SuggestionOut, UserAction,
                                VerificationAction)
 from app.services import notification_service
+from app.schemas.destination import DestinationCreate, DestinationUpdate
+from sqlalchemy.orm import Session, joinedload
+from app.models.destination import (Destination, DestinationPhoto,
+                                    DestinationSuggestion)
 
 router = APIRouter(prefix="/admin", tags=["admin"],
                    dependencies=[Depends(require_role(Role.ADMIN))])
@@ -468,3 +472,129 @@ def set_review_status(review_id: UUID, status: str,
     review_service.recalculate(db, r.subject_type, r.subject_id)
     db.commit()
     return {"status": r.status}
+
+@router.post("/destinations", status_code=201)
+def create_destination(data: DestinationCreate,
+                       admin: User = Depends(require_role(Role.ADMIN)),
+                       db: Session = Depends(get_db)):
+    payload = data.model_dump(exclude={"photos", "slug"})
+    slug = data.slug or _slugify(data.name)
+
+    if db.query(Destination).filter(Destination.slug == slug).first():
+        raise HTTPException(409, f"A destination with the slug “{slug}” already exists")
+
+    dest = Destination(**payload, slug=slug,
+                       status=ContentStatus.ACTIVE, created_by=admin.id)
+    db.add(dest)
+    db.flush()
+
+    for i, url in enumerate(data.photos):
+        db.add(DestinationPhoto(destination_id=dest.id, url=url, sort_order=i))
+
+    db.commit()
+    db.refresh(dest)
+    return {"id": str(dest.id), "slug": dest.slug, "name": dest.name}
+
+
+@router.patch("/destinations/{destination_id}")
+def update_destination(destination_id: UUID, data: DestinationUpdate,
+                       db: Session = Depends(get_db)):
+    d = db.query(Destination).filter(Destination.id == destination_id).first()
+    if not d:
+        raise HTTPException(404, "Destination not found")
+
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(d, k, v)
+
+    db.commit()
+    db.refresh(d)
+    return {"id": str(d.id), "slug": d.slug, "name": d.name}
+
+
+@router.delete("/destinations/{destination_id}", status_code=204)
+def delete_destination(destination_id: UUID, db: Session = Depends(get_db)):
+    """Soft delete — bookings and packages reference destinations."""
+    d = db.query(Destination).filter(Destination.id == destination_id).first()
+    if not d:
+        raise HTTPException(404, "Destination not found")
+
+    from app.models.package import Package
+    live = (db.query(Package)
+            .filter(Package.destination_id == d.id,
+                    Package.status == ContentStatus.ACTIVE).count())
+    if live:
+        raise HTTPException(
+            400,
+            f"{live} active package{'s' if live > 1 else ''} use this destination. "
+            f"Deactivate those first.",
+        )
+
+    d.status = ContentStatus.REMOVED
+    db.commit()
+
+
+@router.post("/destinations/{destination_id}/photos", status_code=201)
+def add_destination_photo(destination_id: UUID, url: str,
+                          caption: str | None = None,
+                          db: Session = Depends(get_db)):
+    d = db.query(Destination).filter(Destination.id == destination_id).first()
+    if not d:
+        raise HTTPException(404, "Destination not found")
+
+    count = db.query(DestinationPhoto).filter(
+        DestinationPhoto.destination_id == d.id).count()
+    photo = DestinationPhoto(destination_id=d.id, url=url,
+                             caption=caption, sort_order=count)
+    db.add(photo)
+    db.commit()
+    return {"id": str(photo.id), "url": photo.url}
+
+
+@router.delete("/destinations/photos/{photo_id}", status_code=204)
+def delete_destination_photo(photo_id: UUID, db: Session = Depends(get_db)):
+    p = db.query(DestinationPhoto).filter(DestinationPhoto.id == photo_id).first()
+    if not p:
+        raise HTTPException(404, "Photo not found")
+    db.delete(p)
+    db.commit()
+
+
+@router.get("/destinations")
+def admin_destinations(include_removed: bool = False,
+                       db: Session = Depends(get_db)):
+    """Admin view — includes inactive and removed."""
+    q = db.query(Destination).options(joinedload(Destination.photos),
+                                      joinedload(Destination.category))
+    if not include_removed:
+        q = q.filter(Destination.status != ContentStatus.REMOVED)
+
+    rows = q.order_by(Destination.name).all()
+
+    from app.models.package import Package
+    out = []
+    for d in rows:
+        pkg_count = db.query(Package).filter(Package.destination_id == d.id).count()
+        out.append({
+            "id": str(d.id), "name": d.name, "slug": d.slug,
+            "region": d.region, "country": d.country,
+            "description": d.description,
+            "category_id": str(d.category_id) if d.category_id else None,
+            "category_name": d.category.name if d.category else None,
+            "lat": float(d.lat) if d.lat else None,
+            "lng": float(d.lng) if d.lng else None,
+            "best_time_to_visit": d.best_time_to_visit,
+            "est_cost_min": float(d.est_cost_min) if d.est_cost_min else None,
+            "est_cost_max": float(d.est_cost_max) if d.est_cost_max else None,
+            "activities": d.activities,
+            "recommended_clothing": d.recommended_clothing,
+            "necessary_items": d.necessary_items,
+            "popular_attractions": d.popular_attractions,
+            "travel_warnings": d.travel_warnings,
+            "other_info": d.other_info,
+            "is_featured": d.is_featured, "is_trending": d.is_trending,
+            "status": d.status,
+            "search_count": d.search_count or 0,
+            "package_count": pkg_count,
+            "photos": [{"id": str(p.id), "url": p.url} for p in d.photos],
+        })
+    return out

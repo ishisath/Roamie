@@ -39,6 +39,8 @@ export const bookingsApi = {
   cancel: (id, reason) => client.post(`/bookings/${id}/cancel`, { reason }),
   tripStatus: (itemId, status, note) =>
     client.patch(`/bookings/items/${itemId}/trip-status`, { status, note }),
+    respond: (itemId, accept, note) =>
+    client.patch(`/bookings/items/${itemId}/respond`, { accept, note }),
 };
 
 export const paymentsApi = {
@@ -70,7 +72,10 @@ export const budgetApi = {
   create: (data) => client.post("/budget", data),
   list: () => client.get("/budget"),
   summary: (id) => client.get(`/budget/${id}`),
+  update: (id, data) => client.patch(`/budget/${id}`, data),
+  remove: (id) => client.delete(`/budget/${id}`),
   addExpense: (id, data) => client.post(`/budget/${id}/expenses`, data),
+  updateExpense: (id, data) => client.patch(`/budget/expenses/${id}`, data),
   deleteExpense: (id) => client.delete(`/budget/expenses/${id}`),
 };
 
@@ -141,11 +146,26 @@ export const adminApi = {
   reviewSuggestion: (id, action, note) =>
     client.patch(`/admin/suggestions/${id}`, { action, note }),
 
+  destinations: (includeRemoved) =>
+    client.get("/admin/destinations", { params: { include_removed: includeRemoved } }),
+  createDestination: (data) => client.post("/admin/destinations", data),
+  updateDestination: (id, data) => client.patch(`/admin/destinations/${id}`, data),
+  deleteDestination: (id) => client.delete(`/admin/destinations/${id}`),
+  addDestinationPhoto: (id, url) =>
+    client.post(`/admin/destinations/${id}/photos`, null, { params: { url } }),
+  deleteDestinationPhoto: (photoId) =>
+    client.delete(`/admin/destinations/photos/${photoId}`),
   setFlags: (id, params) =>
     client.patch(`/admin/destinations/${id}/flags`, null, { params }),
+
   bookings: (params) => client.get("/admin/bookings", { params }),
   payments: (params) => client.get("/admin/payments", { params }),
   reports: (status) => client.get("/admin/reports", { params: { status } }),
   resolveReport: (id, status, admin_note) =>
     client.patch(`/admin/reports/${id}`, { status, admin_note }),
+};
+
+export const weatherApi = {
+  forBooking: (bookingId) => client.get(`/weather/booking/${bookingId}`),
+  forDestination: (slug) => client.get(`/weather/destination/${slug}`),
 };

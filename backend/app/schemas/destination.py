@@ -55,3 +55,46 @@ class Paginated(BaseModel):
     page: int
     size: int
     items: list
+
+class DestinationCreate(BaseModel):
+    name: str
+    slug: str | None = None          # generated from name if omitted
+    description: str | None = None
+    country: str = "Sri Lanka"
+    region: str | None = None
+    lat: Decimal | None = None
+    lng: Decimal | None = None
+    category_id: UUID | None = None
+    best_time_to_visit: str | None = None
+    est_cost_min: Decimal | None = None
+    est_cost_max: Decimal | None = None
+    popular_attractions: list[dict] = []
+    activities: list[str] = []
+    recommended_clothing: list[str] = []
+    necessary_items: list[str] = []
+    travel_warnings: str | None = None
+    other_info: str | None = None
+    is_featured: bool = False
+    is_trending: bool = False
+    photos: list[str] = []
+
+
+class DestinationUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    region: str | None = None
+    lat: Decimal | None = None
+    lng: Decimal | None = None
+    category_id: UUID | None = None
+    best_time_to_visit: str | None = None
+    est_cost_min: Decimal | None = None
+    est_cost_max: Decimal | None = None
+    popular_attractions: list[dict] | None = None
+    activities: list[str] | None = None
+    recommended_clothing: list[str] | None = None
+    necessary_items: list[str] | None = None
+    travel_warnings: str | None = None
+    other_info: str | None = None
+    is_featured: bool | None = None
+    is_trending: bool | None = None
+    status: str | None = None

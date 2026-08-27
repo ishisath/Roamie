@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-
+import { packagesApi, bookingsApi, paymentsApi, availabilityApi,
+         destinationsApi, aiApi } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
-import { DashShell, Panel, MetricCard, Pill, EmptyState, RankBars, Funnel } from "../components/DashShell";
+import { DashShell, Panel, MetricCard, Pill, EmptyState, RankBars, Funnel,
+         FactList } from "../components/DashShell";
 import { TrendChart } from "../components/charts";
 import { comparePeriods, bookingFunnel, cancellationRate, avgBookingValue,
          avgLeadTime, occupancyRate } from "../lib/analytics";
 import SuggestionForm from "../components/SuggestionForm";
 import BidBoard from "../components/BidBoard";
-import { packagesApi, bookingsApi, paymentsApi, availabilityApi, destinationsApi, aiApi } from "../api/endpoints";
 import ItineraryPreview from "../components/ItineraryPreview";
 
 const TABS = ["Overview", "Packages", "Bookings", "Requests", "Availability", "Suggest"];
@@ -33,18 +34,7 @@ export default function GuideDashboard() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyPackage);
   const [error, setError] = useState("");
-
-    const [plans, setPlans] = useState({});
-
-  useEffect(() => {
-    bookings.forEach((b) => {
-      if (b.trip_plan_id && !plans[b.id]) {
-        aiApi.planForBooking(b.id)
-          .then((r) => r.data && setPlans((prev) => ({ ...prev, [b.id]: r.data })))
-          .catch(() => {});
-      }
-    });
-  }, [bookings]);
+  const [plans, setPlans] = useState({});
 
   const loadAll = () => {
     packagesApi.mine().then((r) => setPackages(r.data)).catch(() => {});
@@ -58,6 +48,16 @@ export default function GuideDashboard() {
     destinationsApi.search({ size: 50 })
       .then((r) => setDestinations(r.data.items)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    bookings.forEach((b) => {
+      if (b.trip_plan_id && !plans[b.id]) {
+        aiApi.planForBooking(b.id)
+          .then((r) => r.data && setPlans((prev) => ({ ...prev, [b.id]: r.data })))
+          .catch(() => {});
+      }
+    });
+  }, [bookings]);
 
   const change = (e) => {
     const { name, value, type, checked } = e.target;
@@ -90,14 +90,26 @@ export default function GuideDashboard() {
     }
   };
 
+  const respond = async (itemId, accept) => {
+    setError("");
+    try {
+      await bookingsApi.respond(itemId, accept, null);
+      loadAll();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Couldn't record that response.");
+    }
+  };
+
   const toggleDate = async (d, current) => {
     const next = current === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE";
     await availabilityApi.set([d], next);
     availabilityApi.mine().then((r) => setAvailability(r.data));
   };
 
+  const myItems = (b) => b.items.filter((i) => i.provider_id === user?.id);
+
   const field =
-    "mt-1.5 w-full rounded-lg border border-sand-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500";
+    "mt-1.5 w-full rounded-lg border border-white/12 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-saffron-400";
 
   // ----- derived analytics -----
   const monthly = earnings?.monthly?.map((m) => ({
@@ -127,6 +139,13 @@ export default function GuideDashboard() {
   const bookedDays = availability.filter((a) => a.status === "BOOKED").length;
   const freeDays = availability.filter((a) => a.status === "AVAILABLE").length;
 
+  const awaitingResponse = bookings.filter((b) =>
+    myItems(b).some((i) => i.provider_status === "PENDING") &&
+    b.payment_status === "SUCCESS" && b.status !== "CANCELLED"
+  ).length;
+
+  const backdrop = packages.find((p) => p.photos?.[0])?.photos[0].url;
+
   return (
     <DashShell
       eyebrow="Guide workspace"
@@ -135,10 +154,11 @@ export default function GuideDashboard() {
       tabs={TABS}
       tab={tab}
       setTab={setTab}
-      badges={{ Bookings: upcoming.length }}
+      badges={{ Bookings: awaitingResponse || upcoming.length }}
+      backdrop={backdrop}
     >
       {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
       )}
@@ -146,6 +166,23 @@ export default function GuideDashboard() {
       {/* ---------- OVERVIEW ---------- */}
       {tab === "Overview" && (
         <div className="space-y-5">
+          {awaitingResponse > 0 && (
+            <button
+              onClick={() => setTab("Bookings")}
+              className="flex w-full items-center justify-between rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-5 text-left transition hover:bg-saffron-500/15"
+            >
+              <div>
+                <p className="font-display font-semibold text-white">
+                  {awaitingResponse} booking{awaitingResponse > 1 ? "s" : ""} waiting on you
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  Travellers have paid. Accept to lock in the dates.
+                </p>
+              </div>
+              <span className="text-saffron-400">→</span>
+            </button>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Net earnings"
@@ -154,6 +191,7 @@ export default function GuideDashboard() {
               delta={period.delta}
               deltaLabel={period.previous ? "vs previous month" : "First month of trading"}
               spark={monthly.map((m) => m.amount)}
+              tone="saffron"
             />
             <MetricCard
               label="Average booking"
@@ -164,7 +202,6 @@ export default function GuideDashboard() {
             <MetricCard
               label="Calendar occupancy"
               value={`${occupancy}%`}
-              tone="saffron"
               deltaLabel={`${bookedDays} of ${availability.length} days booked`}
             />
             <MetricCard
@@ -177,7 +214,7 @@ export default function GuideDashboard() {
           <div className="grid gap-5 xl:grid-cols-3">
             <Panel title="Revenue" sub="Net of the 10% platform fee" className="xl:col-span-2">
               {monthly.length === 0 ? (
-                <p className="py-20 text-center text-sm text-ink-soft">
+                <p className="py-20 text-center text-sm text-white/40">
                   Revenue appears here once a booking is paid.
                 </p>
               ) : (
@@ -187,10 +224,10 @@ export default function GuideDashboard() {
 
             <Panel title="Booking funnel" sub="Where travellers drop off">
               <Funnel stages={funnel} />
-              <div className="mt-5 border-t border-sand-200 pt-4">
+              <div className="mt-5 border-t border-white/8 pt-4">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm text-ink-soft">Request → paid</span>
-                  <span className="font-display font-semibold">
+                  <span className="text-sm text-white/55">Request → paid</span>
+                  <span className="font-display font-semibold text-white">
                     {funnel[0].value ? Math.round((funnel[1].value / funnel[0].value) * 100) : 0}%
                   </span>
                 </div>
@@ -207,21 +244,14 @@ export default function GuideDashboard() {
             </Panel>
 
             <Panel title="At a glance">
-              <dl className="space-y-4">
-                {[
-                  ["Active packages", packages.filter((p) => p.status !== "INACTIVE").length],
-                  ["Upcoming trips", upcoming.length],
-                  ["Awaiting payment", `LKR ${Number(earnings?.pending_payments || 0).toLocaleString()}`],
-                  ["Platform fees paid", `LKR ${Number(earnings?.platform_commission || 0).toLocaleString()}`],
-                  ["Avg. lead time", `${leadTime} days`],
-                  ["Free days ahead", freeDays],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3 border-b border-sand-100 pb-3 last:border-0 last:pb-0">
-                    <dt className="text-sm text-ink-soft">{k}</dt>
-                    <dd className="font-display font-semibold">{v}</dd>
-                  </div>
-                ))}
-              </dl>
+              <FactList items={[
+                ["Active packages", packages.filter((p) => p.status !== "INACTIVE").length],
+                ["Upcoming trips", upcoming.length],
+                ["Awaiting payment", `LKR ${Number(earnings?.pending_payments || 0).toLocaleString()}`],
+                ["Platform fees paid", `LKR ${Number(earnings?.platform_commission || 0).toLocaleString()}`],
+                ["Avg. lead time", `${leadTime} days`],
+                ["Free days ahead", freeDays],
+              ]} />
             </Panel>
           </div>
         </div>
@@ -235,26 +265,26 @@ export default function GuideDashboard() {
           action={
             <button
               onClick={() => setShowForm(!showForm)}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              className="rounded-lg bg-saffron-500 px-4 py-2 text-sm font-medium text-night-900 hover:bg-saffron-400"
             >
               {showForm ? "Cancel" : "New package"}
             </button>
           }
         >
           {showForm && (
-            <form onSubmit={createPackage} className="mb-6 rounded-xl bg-sand-50 p-5">
+            <form onSubmit={createPackage} className="mb-6 rounded-xl border border-white/8 bg-slate-900/60 p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label className="eyebrow text-ink-soft">Title</label>
+                  <label className="eyebrow text-white/45">Title</label>
                   <input name="title" required value={form.title} onChange={change} className={field} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="eyebrow text-ink-soft">Description</label>
+                  <label className="eyebrow text-white/45">Description</label>
                   <textarea name="description" rows={3} value={form.description}
                             onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Destination</label>
+                  <label className="eyebrow text-white/45">Destination</label>
                   <select name="destination_id" required value={form.destination_id}
                           onChange={change} className={field}>
                     <option value="">Choose…</option>
@@ -264,82 +294,82 @@ export default function GuideDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Type</label>
+                  <label className="eyebrow text-white/45">Type</label>
                   <input name="package_type" value={form.package_type} onChange={change}
                          placeholder="Cultural, Wildlife…" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Days</label>
+                  <label className="eyebrow text-white/45">Days</label>
                   <input type="number" name="duration_days" min={1} value={form.duration_days}
                          onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Price per person</label>
+                  <label className="eyebrow text-white/45">Price per person</label>
                   <input type="number" name="price" required value={form.price}
                          onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Max travellers</label>
+                  <label className="eyebrow text-white/45">Max travellers</label>
                   <input type="number" name="max_travelers" min={1} value={form.max_travelers}
                          onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Activities</label>
+                  <label className="eyebrow text-white/45">Activities</label>
                   <input name="activities" value={form.activities} onChange={change}
                          placeholder="Hiking, Photography" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Included</label>
+                  <label className="eyebrow text-white/45">Included</label>
                   <input name="included" value={form.included} onChange={change}
                          placeholder="Guide, Lunch" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Not included</label>
+                  <label className="eyebrow text-white/45">Not included</label>
                   <input name="excluded" value={form.excluded} onChange={change}
                          placeholder="Tips" className={field} />
                 </div>
               </div>
 
-              <div className="mt-5 rounded-lg border border-sand-300 bg-white p-4">
-                <label className="flex items-center gap-2 text-sm font-medium">
+              <div className="mt-5 rounded-lg border border-white/10 p-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-white">
                   <input type="checkbox" name="transport_included"
                          checked={form.transport_included} onChange={change}
-                         className="accent-brand-600" />
+                         className="accent-saffron-500" />
                   Transport included — I arrange the vehicle
                 </label>
 
                 {form.transport_included && (
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="eyebrow text-ink-soft">Vehicle</label>
+                      <label className="eyebrow text-white/45">Vehicle</label>
                       <input name="vehicle_type" required value={form.vehicle_type}
                              onChange={change} placeholder="Toyota KDH Van" className={field} />
                     </div>
                     <div>
-                      <label className="eyebrow text-ink-soft">Seats</label>
+                      <label className="eyebrow text-white/45">Seats</label>
                       <input type="number" name="vehicle_seats" value={form.vehicle_seats}
                              onChange={change} className={field} />
                     </div>
                     <div>
-                      <label className="eyebrow text-ink-soft">Pickup</label>
+                      <label className="eyebrow text-white/45">Pickup</label>
                       <input name="pickup_info" value={form.pickup_info}
                              onChange={change} className={field} />
                     </div>
                     <div>
-                      <label className="eyebrow text-ink-soft">Drop-off</label>
+                      <label className="eyebrow text-white/45">Drop-off</label>
                       <input name="dropoff_info" value={form.dropoff_info}
                              onChange={change} className={field} />
                     </div>
-                    <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                    <label className="flex items-center gap-2 text-sm text-white sm:col-span-2">
                       <input type="checkbox" name="is_ac" checked={form.is_ac}
-                             onChange={change} className="accent-brand-600" />
+                             onChange={change} className="accent-saffron-500" />
                       Air conditioned
                     </label>
                   </div>
                 )}
               </div>
 
-              <button className="mt-5 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
+              <button className="mt-5 rounded-lg bg-saffron-500 px-5 py-2.5 text-sm font-medium text-night-900 hover:bg-saffron-400">
                 Publish package
               </button>
             </form>
@@ -351,15 +381,15 @@ export default function GuideDashboard() {
               body="Create your first package and it goes live for travellers immediately."
             />
           ) : (
-            <div className="divide-y divide-sand-200">
+            <div className="divide-y divide-white/8">
               {packages.map((p) => (
                 <div key={p.id} className="flex items-center justify-between gap-4 py-4">
                   <div className="min-w-0">
                     <Link to={`/packages/${p.id}`}
-                          className="font-display font-semibold hover:text-brand-600">
+                          className="font-display font-semibold text-white hover:text-saffron-400">
                       {p.title}
                     </Link>
-                    <p className="mt-0.5 text-sm text-ink-soft">
+                    <p className="mt-0.5 text-sm text-white/50">
                       {p.duration_days}d · LKR {Number(p.price).toLocaleString()} ·{" "}
                       {p.booking_count || 0} booking{p.booking_count === 1 ? "" : "s"}
                     </p>
@@ -370,7 +400,7 @@ export default function GuideDashboard() {
                     </Pill>
                     <button
                       onClick={() => packagesApi.deactivate(p.id).then(loadAll)}
-                      className="rounded-lg border border-sand-300 px-3 py-1.5 text-xs hover:bg-sand-100"
+                      className="rounded-lg border border-white/12 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
                     >
                       Deactivate
                     </button>
@@ -391,61 +421,115 @@ export default function GuideDashboard() {
           />
         ) : (
           <div className="space-y-3">
-            {bookings.map((b) => (
-              <Panel key={b.id}>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-sm text-ink-soft">{b.reference}</p>
-                    <p className="mt-1 font-display text-lg font-semibold">
-                      {new Date(b.start_date).toLocaleDateString("en-GB", {
-                        day: "numeric", month: "long", year: "numeric",
-                      })}
-                    </p>
-                    <p className="text-sm text-ink-soft">
-                      {b.num_travelers} traveller{b.num_travelers > 1 ? "s" : ""}
-                      {b.pickup_location && ` · pickup at ${b.pickup_location}`}
-                    </p>
-                                        {b.notes && (
-                      <p className="mt-2 rounded-lg bg-sand-50 px-3 py-2 text-sm text-ink-soft">
-                        “{b.notes}”
-                      </p>
-                    )}
+            {bookings.map((b) => {
+              const mine = myItems(b);
+              const pending = mine.some((i) => i.provider_status === "PENDING");
+              const paid = b.payment_status === "SUCCESS";
+              const live = b.status !== "CANCELLED";
 
-                    {plans[b.id] && (
-                      <details className="mt-4 overflow-hidden rounded-xl border border-brand-200 bg-brand-50">
-                        <summary className="cursor-pointer px-4 py-3">
-                          <span className="eyebrow text-brand-700">
-                            Traveller's itinerary
-                          </span>
-                          <span className="ml-2 font-display text-sm font-semibold">
-                            {plans[b.id].title}
-                          </span>
-                          <span className="ml-2 text-xs text-ink-soft">
-                            · {plans[b.id].items.length} stops
-                          </span>
-                        </summary>
-                        <div className="border-t border-brand-200/60 bg-white p-5">
-                          <ItineraryPreview plan={plans[b.id]} />
-                        </div>
-                      </details>
-                    )}
+              return (
+                <Panel key={b.id}
+                       className={pending && paid && live ? "ring-1 ring-saffron-500/30" : ""}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm text-white/45">{b.reference}</p>
+                      <p className="mt-1 font-display text-lg font-semibold text-white">
+                        {new Date(b.start_date).toLocaleDateString("en-GB", {
+                          day: "numeric", month: "long", year: "numeric",
+                        })}
+                      </p>
+                      <p className="text-sm text-white/50">
+                        {b.traveler?.full_name && `${b.traveler.full_name} · `}
+                        {b.num_travelers} traveller{b.num_travelers > 1 ? "s" : ""}
+                        {b.pickup_location && ` · pickup at ${b.pickup_location}`}
+                      </p>
+
+                      {b.notes && (
+                        <p className="mt-3 rounded-lg bg-white/5 px-3 py-2 text-sm text-white/70">
+                          “{b.notes}”
+                        </p>
+                      )}
+
+                      {plans[b.id] && (
+                        <details className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                          <summary className="cursor-pointer px-4 py-3">
+                            <span className="eyebrow text-saffron-400">
+                              Traveller's itinerary
+                            </span>
+                            <span className="ml-2 font-display text-sm font-semibold text-white">
+                              {plans[b.id].title}
+                            </span>
+                            <span className="ml-2 text-xs text-white/40">
+                              · {plans[b.id].items.length} stops
+                            </span>
+                          </summary>
+                          <div className="border-t border-white/8 p-5">
+                            <ItineraryPreview plan={plans[b.id]} dark />
+                          </div>
+                        </details>
+                      )}
+
+                      {/* accept / decline */}
+                      {mine.map((item) =>
+                        item.provider_status === "PENDING" && paid && live ? (
+                          <div key={item.id}
+                               className="mt-4 rounded-xl border border-saffron-500/30 bg-saffron-500/10 p-4">
+                            <p className="font-display text-sm font-semibold text-white">
+                              This booking needs your answer
+                            </p>
+                            <p className="mt-1 text-xs text-white/60">
+                              The traveller has paid and your dates are on hold. Accept to
+                              lock it in, or decline and they'll be refunded.
+                            </p>
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                onClick={() => respond(item.id, true)}
+                                className="rounded-lg bg-saffron-500 px-4 py-2 text-sm font-medium text-night-900 hover:bg-saffron-400"
+                              >
+                                Accept booking
+                              </button>
+                              <button
+                                onClick={() => respond(item.id, false)}
+                                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-red-400/40 hover:text-red-300"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ) : item.provider_status === "PENDING" && !paid ? (
+                          <p key={item.id} className="mt-3 text-xs text-white/45">
+                            Waiting for the traveller to pay before you respond.
+                          </p>
+                        ) : (
+                          <p key={item.id} className="mt-3 text-xs text-white/45">
+                            You {item.provider_status.toLowerCase()} this booking.
+                          </p>
+                        )
+                      )}
+                    </div>
+
+                    <div className="text-right">
+                      <Pill tone={
+                        mine[0]?.provider_status === "ACCEPTED" ? "brand"
+                        : mine[0]?.provider_status === "DECLINED" ? "danger"
+                        : b.status === "CANCELLED" ? "danger" : "saffron"
+                      }>
+                        {mine[0]?.provider_status === "PENDING" && paid
+                          ? "Needs your answer"
+                          : mine[0]?.provider_status || b.status}
+                      </Pill>
+                      <p className="mt-2 font-display text-xl font-bold text-saffron-400">
+                        LKR {Number(b.total_amount).toLocaleString()}
+                      </p>
+                      <Link to={`/messages/${b.id}`}
+                            className="mt-1 block text-sm text-white/60 hover:text-white">
+                        Message traveller
+                      </Link>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <Pill tone={b.status === "CONFIRMED" ? "brand"
-                              : b.status === "CANCELLED" ? "danger" : "saffron"}>
-                      {b.status}
-                    </Pill>
-                    <p className="mt-2 font-display text-xl font-bold text-brand-600">
-                      LKR {Number(b.total_amount).toLocaleString()}
-                    </p>
-                    <Link to={`/messages/${b.id}`}
-                          className="mt-1 block text-sm text-brand-600 hover:underline">
-                      Message traveller
-                    </Link>
-                  </div>
-                </div>
-              </Panel>
-            ))}
+                </Panel>
+              );
+            })}
           </div>
         )
       )}
@@ -470,19 +554,19 @@ export default function GuideDashboard() {
                   onClick={() => toggleDate(a.date, a.status)}
                   className={`rounded-lg border p-2.5 text-xs transition ${
                     booked
-                      ? "cursor-not-allowed border-brand-200 bg-brand-50 text-brand-700"
+                      ? "cursor-not-allowed border-saffron-500/40 bg-saffron-500/15 text-saffron-400"
                       : free
-                      ? "border-sand-200 bg-white hover:border-brand-500"
-                      : "border-sand-200 bg-sand-100 text-ink-soft/50 line-through"
+                      ? "border-white/10 bg-white/5 text-white hover:border-saffron-400"
+                      : "border-white/8 bg-transparent text-white/25 line-through"
                   }`}
                 >
                   <span className="block font-display text-base font-bold">
                     {new Date(a.date).getDate()}
                   </span>
-                  <span className="block text-[10px]">
+                  <span className="block text-[10px] opacity-70">
                     {new Date(a.date).toLocaleDateString("en-GB", { month: "short" })}
                   </span>
-                  <span className="mt-1 block text-[9px] uppercase tracking-wide">
+                  <span className="mt-1 block text-[9px] uppercase tracking-wide opacity-60">
                     {booked ? "Booked" : free ? "Free" : "Off"}
                   </span>
                 </button>
@@ -493,7 +577,7 @@ export default function GuideDashboard() {
       )}
 
       {/* ---------- SUGGEST ---------- */}
-      {tab === "Suggest" && <SuggestionForm />}
+      {tab === "Suggest" && <SuggestionForm dark />}
     </DashShell>
   );
 }

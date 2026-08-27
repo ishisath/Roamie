@@ -49,6 +49,8 @@ class TripPlanOut(BaseModel):
 class AskRequest(BaseModel):
     question: str
     trip_plan_id: UUID | None = None
+    context_type: str | None = None    # PACKAGE | DESTINATION | BOOKING | PROVIDER
+    context_id: UUID | None = None
 
 
 class AskResponse(BaseModel):

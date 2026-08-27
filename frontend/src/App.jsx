@@ -24,6 +24,7 @@ import ProviderProfile from "./pages/ProviderProfile";
 import BookProvider from "./pages/BookProvider";
 import TripRequests from "./pages/TripRequests";
 import BookingDetail from "./pages/BookingDetail";
+import TripPlans from "./pages/TripPlans";
 
 export default function App() {
   return (
@@ -62,6 +63,13 @@ export default function App() {
             path="/book/package/:id"
             element={<ProtectedRoute roles={["TRAVELER"]}><BookPackage /></ProtectedRoute>}
           />
+
+          <Route
+  path="/plans"
+  element={<ProtectedRoute roles={["TRAVELER"]}><TripPlans /></ProtectedRoute>}
+/>
+
+
           <Route
             path="/plans/:id"
             element={<ProtectedRoute roles={["TRAVELER"]}><TripPlan /></ProtectedRoute>}

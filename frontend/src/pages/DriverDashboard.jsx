@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-
+import { bookingsApi, paymentsApi, availabilityApi, vehiclesApi,
+         aiApi } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
-import { DashShell, Panel, MetricCard, Pill, EmptyState, RankBars, Funnel } from "../components/DashShell";
+import { DashShell, Panel, MetricCard, Pill, EmptyState, RankBars, Funnel,
+         FactList } from "../components/DashShell";
 import { TrendChart } from "../components/charts";
 import { comparePeriods, bookingFunnel, cancellationRate, avgBookingValue,
          occupancyRate } from "../lib/analytics";
 import SuggestionForm from "../components/SuggestionForm";
 import BidBoard from "../components/BidBoard";
 import ImageUpload from "../components/ImageUpload";
-import { bookingsApi, paymentsApi, availabilityApi, vehiclesApi, aiApi } from "../api/endpoints";
 import ItineraryPreview from "../components/ItineraryPreview";
 
 const TABS = ["Overview", "Trips", "Requests", "Vehicles", "Availability", "Suggest"];
@@ -39,7 +40,16 @@ export default function DriverDashboard() {
   const [form, setForm] = useState(emptyVehicle);
   const [vehiclePhotos, setVehiclePhotos] = useState([]);
   const [error, setError] = useState("");
-    const [plans, setPlans] = useState({});
+  const [plans, setPlans] = useState({});
+
+  const loadAll = () => {
+    bookingsApi.list().then((r) => setBookings(r.data)).catch(() => {});
+    paymentsApi.earnings().then((r) => setEarnings(r.data)).catch(() => {});
+    vehiclesApi.mine().then((r) => setVehicles(r.data)).catch(() => {});
+    availabilityApi.mine().then((r) => setAvailability(r.data)).catch(() => {});
+  };
+
+  useEffect(() => { loadAll(); }, []);
 
   useEffect(() => {
     bookings.forEach((b) => {
@@ -50,15 +60,6 @@ export default function DriverDashboard() {
       }
     });
   }, [bookings]);
-
-  const loadAll = () => {
-    bookingsApi.list().then((r) => setBookings(r.data)).catch(() => {});
-    paymentsApi.earnings().then((r) => setEarnings(r.data)).catch(() => {});
-    vehiclesApi.mine().then((r) => setVehicles(r.data)).catch(() => {});
-    availabilityApi.mine().then((r) => setAvailability(r.data)).catch(() => {});
-  };
-
-  useEffect(() => { loadAll(); }, []);
 
   const change = (e) => {
     const { name, value, type, checked } = e.target;
@@ -80,7 +81,8 @@ export default function DriverDashboard() {
       setVehiclePhotos([]);
       loadAll();
     } catch (err) {
-      setError(err.response?.data?.detail || "Couldn't add the vehicle. Check the registration number isn't already used.");
+      setError(err.response?.data?.detail ||
+        "Couldn't add the vehicle. Check the registration number isn't already used.");
     }
   };
 
@@ -96,6 +98,16 @@ export default function DriverDashboard() {
     }
   };
 
+  const respond = async (itemId, accept) => {
+    setError("");
+    try {
+      await bookingsApi.respond(itemId, accept, null);
+      loadAll();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Couldn't record that response.");
+    }
+  };
+
   const toggleDate = async (d, current) => {
     const next = current === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE";
     await availabilityApi.set([d], next);
@@ -106,7 +118,7 @@ export default function DriverDashboard() {
     b.items.filter((i) => i.provider_id === user?.id && i.service_type === "DRIVER");
 
   const field =
-    "mt-1.5 w-full rounded-lg border border-sand-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500";
+    "mt-1.5 w-full rounded-lg border border-white/12 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-saffron-400";
 
   // ----- derived analytics -----
   const monthly = earnings?.monthly?.map((m) => ({
@@ -127,14 +139,22 @@ export default function DriverDashboard() {
   const completedTrips = bookings.filter((b) => b.status === "COMPLETED").length;
   const upcoming = bookings.filter((b) => ["PENDING", "CONFIRMED"].includes(b.status));
   const live = bookings.filter((b) =>
-    myItems(b).some((i) => i.trip_status && i.trip_status !== "COMPLETED" && i.trip_status !== "CONFIRMED")
+    myItems(b).some((i) => i.trip_status &&
+      i.trip_status !== "COMPLETED" && i.trip_status !== "CONFIRMED")
   );
 
-  // where trips sit in the status flow
+  const awaitingResponse = bookings.filter((b) =>
+    myItems(b).some((i) => i.provider_status === "PENDING") &&
+    b.payment_status === "SUCCESS" && b.status !== "CANCELLED"
+  ).length;
+
   const flowSpread = FLOW.map((s) => ({
     name: FLOW_LABEL[s],
     value: bookings.reduce(
-      (n, b) => n + myItems(b).filter((i) => (i.trip_status || "CONFIRMED") === s).length, 0
+      (n, b) => n + myItems(b).filter(
+        (i) => i.provider_status === "ACCEPTED" &&
+               (i.trip_status || "CONFIRMED") === s
+      ).length, 0
     ),
   })).filter((s) => s.value > 0);
 
@@ -149,6 +169,8 @@ export default function DriverDashboard() {
   const bookedDays = availability.filter((a) => a.status === "BOOKED").length;
   const pendingVehicles = vehicles.filter((v) => v.verification_status === "PENDING").length;
 
+  const backdrop = vehicles.find((v) => v.photos?.[0])?.photos[0];
+
   return (
     <DashShell
       eyebrow="Driver workspace"
@@ -157,10 +179,11 @@ export default function DriverDashboard() {
       tabs={TABS}
       tab={tab}
       setTab={setTab}
-      badges={{ Trips: live.length, Vehicles: pendingVehicles }}
+      badges={{ Trips: awaitingResponse || live.length, Vehicles: pendingVehicles }}
+      backdrop={backdrop}
     >
       {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
       )}
@@ -168,6 +191,23 @@ export default function DriverDashboard() {
       {/* ---------- OVERVIEW ---------- */}
       {tab === "Overview" && (
         <div className="space-y-5">
+          {awaitingResponse > 0 && (
+            <button
+              onClick={() => setTab("Trips")}
+              className="flex w-full items-center justify-between rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-5 text-left transition hover:bg-saffron-500/15"
+            >
+              <div>
+                <p className="font-display font-semibold text-white">
+                  {awaitingResponse} trip{awaitingResponse > 1 ? "s" : ""} waiting on you
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  Travellers have paid. Accept to lock in the dates.
+                </p>
+              </div>
+              <span className="text-saffron-400">→</span>
+            </button>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Net earnings"
@@ -176,6 +216,7 @@ export default function DriverDashboard() {
               delta={period.delta}
               deltaLabel={period.previous ? "vs previous month" : "First month of trading"}
               spark={monthly.map((m) => m.amount)}
+              tone="saffron"
             />
             <MetricCard
               label="Average per trip"
@@ -186,7 +227,6 @@ export default function DriverDashboard() {
             <MetricCard
               label="Passengers carried"
               value={passengers}
-              tone="saffron"
               deltaLabel="Across completed trips"
             />
             <MetricCard
@@ -199,7 +239,7 @@ export default function DriverDashboard() {
           <div className="grid gap-5 xl:grid-cols-3">
             <Panel title="Revenue" sub="Net of the 10% platform fee" className="xl:col-span-2">
               {monthly.length === 0 ? (
-                <p className="py-20 text-center text-sm text-ink-soft">
+                <p className="py-20 text-center text-sm text-white/40">
                   Revenue appears here once a trip is paid for.
                 </p>
               ) : (
@@ -209,11 +249,11 @@ export default function DriverDashboard() {
 
             <Panel title="Trip funnel" sub="Requested through to completed">
               <Funnel stages={funnel} />
-              <div className="mt-5 border-t border-sand-200 pt-4">
+              <div className="mt-5 border-t border-white/8 pt-4">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm text-ink-soft">Cancellation rate</span>
+                  <span className="text-sm text-white/55">Cancellation rate</span>
                   <span className={`font-display font-semibold ${
-                    cancelRate > 15 ? "text-red-600" : ""
+                    cancelRate > 15 ? "text-red-300" : "text-white"
                   }`}>
                     {cancelRate}%
                   </span>
@@ -223,7 +263,7 @@ export default function DriverDashboard() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-3">
-            <Panel title="Trips by stage" sub="Where your current work sits">
+            <Panel title="Trips by stage" sub="Where your accepted work sits">
               <RankBars items={flowSpread} emptyText="No trips in progress." />
             </Panel>
 
@@ -235,21 +275,14 @@ export default function DriverDashboard() {
             </Panel>
 
             <Panel title="At a glance">
-              <dl className="space-y-4">
-                {[
-                  ["Active vehicles", vehicles.filter((v) => v.is_active).length],
-                  ["Awaiting verification", pendingVehicles],
-                  ["Upcoming trips", upcoming.length],
-                  ["In progress", live.length],
-                  ["Awaiting payment", `LKR ${Number(earnings?.pending_payments || 0).toLocaleString()}`],
-                  ["Platform fees paid", `LKR ${Number(earnings?.platform_commission || 0).toLocaleString()}`],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3 border-b border-sand-100 pb-3 last:border-0 last:pb-0">
-                    <dt className="text-sm text-ink-soft">{k}</dt>
-                    <dd className="font-display font-semibold">{v}</dd>
-                  </div>
-                ))}
-              </dl>
+              <FactList items={[
+                ["Active vehicles", vehicles.filter((v) => v.is_active).length],
+                ["Awaiting verification", pendingVehicles],
+                ["Upcoming trips", upcoming.length],
+                ["In progress", live.length],
+                ["Awaiting payment", `LKR ${Number(earnings?.pending_payments || 0).toLocaleString()}`],
+                ["Platform fees paid", `LKR ${Number(earnings?.platform_commission || 0).toLocaleString()}`],
+              ]} />
             </Panel>
           </div>
         </div>
@@ -270,101 +303,155 @@ export default function DriverDashboard() {
                 const idx = FLOW.indexOf(current);
                 const next = FLOW[idx + 1];
                 const liveTrip = b.status === "CONFIRMED" || b.status === "ACTIVE";
+                const accepted = item.provider_status === "ACCEPTED";
+                const needsAnswer = item.provider_status === "PENDING" &&
+                                    b.payment_status === "SUCCESS" &&
+                                    b.status !== "CANCELLED";
 
                 return (
-                  <Panel key={item.id}>
+                  <Panel key={item.id}
+                         className={needsAnswer ? "ring-1 ring-saffron-500/30" : ""}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="font-mono text-sm text-ink-soft">{b.reference}</p>
-                        <p className="mt-1 font-display text-lg font-semibold">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm text-white/45">{b.reference}</p>
+                        <p className="mt-1 font-display text-lg font-semibold text-white">
                           {new Date(b.start_date).toLocaleDateString("en-GB", {
                             day: "numeric", month: "long", year: "numeric",
                           })}
                           {b.start_time && ` · ${b.start_time.slice(0, 5)}`}
                         </p>
-                        <p className="text-sm text-ink-soft">
+                        <p className="text-sm text-white/50">
+                          {b.traveler?.full_name && `${b.traveler.full_name} · `}
                           {b.num_travelers} passenger{b.num_travelers > 1 ? "s" : ""}
                         </p>
-                        <div className="mt-3 space-y-1 text-sm">
+
+                        <div className="mt-3 space-y-1 text-sm text-white/75">
                           {b.pickup_location && (
-                            <p><span className="text-ink-soft">Pickup — </span>{b.pickup_location}</p>
+                            <p><span className="text-white/45">Pickup — </span>{b.pickup_location}</p>
                           )}
-                                                    {b.dropoff_location && (
-                            <p><span className="text-ink-soft">Drop-off — </span>{b.dropoff_location}</p>
+                          {b.dropoff_location && (
+                            <p><span className="text-white/45">Drop-off — </span>{b.dropoff_location}</p>
                           )}
                         </div>
 
+                        {b.notes && (
+                          <p className="mt-3 rounded-lg bg-white/5 px-3 py-2 text-sm text-white/70">
+                            “{b.notes}”
+                          </p>
+                        )}
+
                         {plans[b.id] && (
-                          <details className="mt-4 overflow-hidden rounded-xl border border-brand-200 bg-brand-50">
+                          <details className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/5">
                             <summary className="cursor-pointer px-4 py-3">
-                              <span className="eyebrow text-brand-700">
+                              <span className="eyebrow text-saffron-400">
                                 Traveller's itinerary
                               </span>
-                              <span className="ml-2 font-display text-sm font-semibold">
+                              <span className="ml-2 font-display text-sm font-semibold text-white">
                                 {plans[b.id].title}
                               </span>
-                              <span className="ml-2 text-xs text-ink-soft">
+                              <span className="ml-2 text-xs text-white/40">
                                 · {plans[b.id].items.length} stops
                               </span>
                             </summary>
-                            <div className="border-t border-brand-200/60 bg-white p-5">
-                              <ItineraryPreview plan={plans[b.id]} />
+                            <div className="border-t border-white/8 p-5">
+                              <ItineraryPreview plan={plans[b.id]} dark />
                             </div>
                           </details>
                         )}
+
+                        {/* accept / decline */}
+                        {needsAnswer ? (
+                          <div className="mt-4 rounded-xl border border-saffron-500/30 bg-saffron-500/10 p-4">
+                            <p className="font-display text-sm font-semibold text-white">
+                              This trip needs your answer
+                            </p>
+                            <p className="mt-1 text-xs text-white/60">
+                              The traveller has paid and your dates are on hold. Accept to
+                              lock it in, or decline and they'll be refunded.
+                            </p>
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                onClick={() => respond(item.id, true)}
+                                className="rounded-lg bg-saffron-500 px-4 py-2 text-sm font-medium text-night-900 hover:bg-saffron-400"
+                              >
+                                Accept trip
+                              </button>
+                              <button
+                                onClick={() => respond(item.id, false)}
+                                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-red-400/40 hover:text-red-300"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ) : item.provider_status === "PENDING" ? (
+                          <p className="mt-3 text-xs text-white/45">
+                            Waiting for the traveller to pay before you respond.
+                          </p>
+                        ) : item.provider_status === "DECLINED" ? (
+                          <p className="mt-3 text-xs text-red-300">
+                            You declined this trip.
+                          </p>
+                        ) : null}
                       </div>
+
                       <div className="text-right">
-                        <Pill tone={b.status === "CONFIRMED" ? "brand"
-                                  : b.status === "CANCELLED" ? "danger" : "saffron"}>
-                          {b.status}
+                        <Pill tone={
+                          needsAnswer ? "saffron"
+                          : item.provider_status === "ACCEPTED" ? "brand"
+                          : item.provider_status === "DECLINED" ? "danger" : "neutral"
+                        }>
+                          {needsAnswer ? "Needs your answer" : item.provider_status}
                         </Pill>
-                        <p className="mt-2 font-display text-xl font-bold text-brand-600">
+                        <p className="mt-2 font-display text-xl font-bold text-saffron-400">
                           LKR {Number(item.provider_net).toLocaleString()}
                         </p>
                         <Link to={`/messages/${b.id}`}
-                              className="mt-1 block text-sm text-brand-600 hover:underline">
+                              className="mt-1 block text-sm text-white/60 hover:text-white">
                           Message traveller
                         </Link>
                       </div>
                     </div>
 
-                    {/* the rail — genuine sequence */}
-                    <div className="mt-6 border-t border-sand-200 pt-5">
-                      <div className="flex items-center">
-                        {FLOW.map((s, i) => (
-                          <div key={s} className="flex flex-1 items-center last:flex-none">
-                            <div className="flex flex-col items-center">
-                              <span className={`h-3 w-3 rounded-full ring-4 ${
-                                i < idx ? "bg-brand-600 ring-brand-50"
-                                : i === idx ? "bg-saffron-500 ring-saffron-100"
-                                : "bg-sand-300 ring-transparent"
-                              }`} />
-                              <span className={`mt-2 whitespace-nowrap text-[11px] ${
-                                i <= idx ? "font-medium text-ink" : "text-ink-soft/60"
-                              }`}>
-                                {FLOW_LABEL[s]}
-                              </span>
+                    {/* the rail — only once accepted */}
+                    {accepted && (
+                      <div className="mt-6 border-t border-white/8 pt-5">
+                        <div className="flex items-center">
+                          {FLOW.map((s, i) => (
+                            <div key={s} className="flex flex-1 items-center last:flex-none">
+                              <div className="flex flex-col items-center">
+                                <span className={`h-3 w-3 rounded-full ring-4 ${
+                                  i < idx ? "bg-brand-500 ring-brand-500/20"
+                                  : i === idx ? "bg-saffron-500 ring-saffron-500/20"
+                                  : "bg-white/15 ring-transparent"
+                                }`} />
+                                <span className={`mt-2 whitespace-nowrap text-[11px] ${
+                                  i <= idx ? "font-medium text-white" : "text-white/35"
+                                }`}>
+                                  {FLOW_LABEL[s]}
+                                </span>
+                              </div>
+                              {i < FLOW.length - 1 && (
+                                <span className={`mx-2 mb-5 h-0.5 flex-1 rounded-full ${
+                                  i < idx ? "bg-brand-500" : "bg-white/10"
+                                }`} />
+                              )}
                             </div>
-                            {i < FLOW.length - 1 && (
-                              <span className={`mx-2 mb-5 h-0.5 flex-1 rounded-full ${
-                                i < idx ? "bg-brand-600" : "bg-sand-200"
-                              }`} />
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
 
-                      {next && liveTrip ? (
-                        <button
-                          onClick={() => advance(item)}
-                          className="mt-5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-                        >
-                          Mark as {FLOW_LABEL[next].toLowerCase()}
-                        </button>
-                      ) : !next ? (
-                        <p className="mt-4 text-sm text-brand-600">Trip completed.</p>
-                      ) : null}
-                    </div>
+                        {next && liveTrip ? (
+                          <button
+                            onClick={() => advance(item)}
+                            className="mt-5 rounded-lg bg-saffron-500 px-4 py-2 text-sm font-medium text-night-900 hover:bg-saffron-400"
+                          >
+                            Mark as {FLOW_LABEL[next].toLowerCase()}
+                          </button>
+                        ) : !next ? (
+                          <p className="mt-4 text-sm text-brand-200">Trip completed.</p>
+                        ) : null}
+                      </div>
+                    )}
                   </Panel>
                 );
               })
@@ -384,48 +471,49 @@ export default function DriverDashboard() {
           action={
             <button
               onClick={() => setShowForm(!showForm)}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              className="rounded-lg bg-saffron-500 px-4 py-2 text-sm font-medium text-night-900 hover:bg-saffron-400"
             >
               {showForm ? "Cancel" : "Add vehicle"}
             </button>
           }
         >
           {showForm && (
-            <form onSubmit={addVehicle} className="mb-6 rounded-xl bg-sand-50 p-5">
+            <form onSubmit={addVehicle}
+                  className="mb-6 rounded-xl border border-white/8 bg-slate-900/60 p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="eyebrow text-ink-soft">Vehicle type</label>
+                  <label className="eyebrow text-white/45">Vehicle type</label>
                   <input name="vehicle_type" required value={form.vehicle_type}
                          onChange={change} placeholder="Van, Car, SUV" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Model</label>
+                  <label className="eyebrow text-white/45">Model</label>
                   <input name="model" value={form.model} onChange={change}
                          placeholder="Toyota KDH" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Registration</label>
+                  <label className="eyebrow text-white/45">Registration</label>
                   <input name="reg_no" required value={form.reg_no} onChange={change}
                          placeholder="WP-ABC-1234" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Seats</label>
+                  <label className="eyebrow text-white/45">Seats</label>
                   <input type="number" name="seats" min={1} value={form.seats}
                          onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Luggage capacity</label>
+                  <label className="eyebrow text-white/45">Luggage capacity</label>
                   <input name="luggage_capacity" value={form.luggage_capacity}
                          onChange={change} placeholder="4 large suitcases" className={field} />
                 </div>
                 <div>
-                  <label className="eyebrow text-ink-soft">Facilities</label>
+                  <label className="eyebrow text-white/45">Facilities</label>
                   <input name="facilities" value={form.facilities} onChange={change}
                          placeholder="WiFi, Charging ports" className={field} />
                 </div>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-white sm:col-span-2">
                   <input type="checkbox" name="is_ac" checked={form.is_ac}
-                         onChange={change} className="accent-brand-600" />
+                         onChange={change} className="accent-saffron-500" />
                   Air conditioned
                 </label>
                 <div className="sm:col-span-2">
@@ -434,7 +522,7 @@ export default function DriverDashboard() {
                 </div>
               </div>
 
-              <button className="mt-5 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
+              <button className="mt-5 rounded-lg bg-saffron-500 px-5 py-2.5 text-sm font-medium text-night-900 hover:bg-saffron-400">
                 Submit for verification
               </button>
             </form>
@@ -448,7 +536,8 @@ export default function DriverDashboard() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {vehicles.map((v) => (
-                <div key={v.id} className="overflow-hidden rounded-xl border border-sand-200">
+                <div key={v.id}
+                     className="overflow-hidden rounded-xl border border-white/8 bg-white/5">
                   {v.photos?.length > 0 && (
                     <div className="flex gap-0.5 overflow-x-auto">
                       {v.photos.map((url) => (
@@ -460,10 +549,10 @@ export default function DriverDashboard() {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-display font-semibold">
+                        <p className="font-display font-semibold text-white">
                           {v.vehicle_type}{v.model && ` · ${v.model}`}
                         </p>
-                        <p className="mt-0.5 text-sm text-ink-soft">
+                        <p className="mt-0.5 text-sm text-white/50">
                           {v.reg_no} · {v.seats} seats · {v.is_ac ? "AC" : "Non-AC"}
                         </p>
                       </div>
@@ -478,7 +567,8 @@ export default function DriverDashboard() {
                     {v.facilities?.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {v.facilities.map((f) => (
-                          <span key={f} className="rounded-full bg-sand-100 px-2 py-0.5 text-xs text-ink-soft">
+                          <span key={f}
+                                className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/60">
                             {f}
                           </span>
                         ))}
@@ -487,7 +577,7 @@ export default function DriverDashboard() {
 
                     <button
                       onClick={() => vehiclesApi.deactivate(v.id).then(loadAll)}
-                      className="mt-4 text-xs text-ink-soft hover:text-red-600"
+                      className="mt-4 text-xs text-white/45 hover:text-red-300"
                     >
                       Remove vehicle
                     </button>
@@ -516,19 +606,19 @@ export default function DriverDashboard() {
                   onClick={() => toggleDate(a.date, a.status)}
                   className={`rounded-lg border p-2.5 text-xs transition ${
                     booked
-                      ? "cursor-not-allowed border-brand-200 bg-brand-50 text-brand-700"
+                      ? "cursor-not-allowed border-saffron-500/40 bg-saffron-500/15 text-saffron-400"
                       : free
-                      ? "border-sand-200 bg-white hover:border-brand-500"
-                      : "border-sand-200 bg-sand-100 text-ink-soft/50 line-through"
+                      ? "border-white/10 bg-white/5 text-white hover:border-saffron-400"
+                      : "border-white/8 bg-transparent text-white/25 line-through"
                   }`}
                 >
                   <span className="block font-display text-base font-bold">
                     {new Date(a.date).getDate()}
                   </span>
-                  <span className="block text-[10px]">
+                  <span className="block text-[10px] opacity-70">
                     {new Date(a.date).toLocaleDateString("en-GB", { month: "short" })}
                   </span>
-                  <span className="mt-1 block text-[9px] uppercase tracking-wide">
+                  <span className="mt-1 block text-[9px] uppercase tracking-wide opacity-60">
                     {booked ? "Booked" : free ? "Free" : "Off"}
                   </span>
                 </button>
@@ -539,7 +629,7 @@ export default function DriverDashboard() {
       )}
 
       {/* ---------- SUGGEST ---------- */}
-      {tab === "Suggest" && <SuggestionForm />}
+      {tab === "Suggest" && <SuggestionForm dark />}
     </DashShell>
   );
 }

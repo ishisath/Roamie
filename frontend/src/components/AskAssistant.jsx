@@ -1,15 +1,60 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { aiApi } from "../api/endpoints";
+import { useAuth } from "../context/AuthContext";
 
-export default function AskAssistant({ tripPlanId }) {
+const SUGGESTIONS = {
+  PACKAGE: [
+    "What's the weather like on these dates?",
+    "What should I pack for this?",
+    "Is this suitable for kids?",
+    "What isn't included in the price?",
+  ],
+  DESTINATION: [
+    "When's the best time to visit?",
+    "How do I get there from Colombo?",
+    "What should I pack?",
+    "Is it safe to swim there?",
+  ],
+  BOOKING: [
+    "What's the weather forecast for my trip?",
+    "What should I pack?",
+    "What time should I be ready?",
+    "What's included in what I paid?",
+  ],
+  PROVIDER: [
+    "What languages do they speak?",
+    "How experienced are they?",
+    "What's their day rate?",
+  ],
+  TRIP_PLAN: [
+    "What should I pack?",
+    "Is the weather okay for day 2?",
+    "How much walking is there?",
+  ],
+  GENERAL: [
+    "Where should I go in Sri Lanka?",
+    "What's the best time to visit?",
+    "How much does a week cost?",
+  ],
+};
+
+export default function AskAssistant({ tripPlanId, contextType, contextId, label }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
+  const bottomRef = useRef(null);
 
-  const send = async (e) => {
-    e.preventDefault();
-    const q = question.trim();
+  const kind = tripPlanId ? "TRIP_PLAN" : contextType || "GENERAL";
+  const prompts = SUGGESTIONS[kind] || SUGGESTIONS.GENERAL;
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, busy]);
+
+  const send = async (text) => {
+    const q = (text ?? question).trim();
     if (!q) return;
 
     setMessages((m) => [...m, { role: "user", text: q }]);
@@ -20,13 +65,17 @@ export default function AskAssistant({ tripPlanId }) {
       const { data } = await aiApi.ask({
         question: q,
         trip_plan_id: tripPlanId || null,
+        context_type: contextType || null,
+        context_id: contextId || null,
       });
       setMessages((m) => [...m, { role: "assistant", text: data.answer }]);
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", text: "Sorry — I couldn't answer that just now." },
-      ]);
+    } catch (err) {
+      setMessages((m) => [...m, {
+        role: "assistant",
+        text: err.response?.status === 401
+          ? "Sign in and I can answer using your bookings and plans."
+          : "Sorry — I couldn't answer that just now. Try again in a moment.",
+      }]);
     } finally {
       setBusy(false);
     }
@@ -36,42 +85,52 @@ export default function AskAssistant({ tripPlanId }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 rounded-full bg-brand-600 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-brand-700"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-saffron-500 px-5 py-3.5 text-sm font-medium text-night-900 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)] transition hover:bg-saffron-400"
       >
-        Ask Roamie
+        <span className="text-base">✦</span>
+        {label || "Ask Roamie"}
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex h-[28rem] w-[22rem] flex-col rounded-xl border border-sand-300 bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-sand-300 px-4 py-3">
+    <div className="fixed bottom-6 right-6 z-50 flex h-[30rem] w-[23rem] flex-col overflow-hidden rounded-2xl border border-white/12 bg-slate-800 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold">Roamie assistant</p>
-          {tripPlanId && (
-            <p className="text-xs text-ink/50">Knows your itinerary</p>
-          )}
+          <p className="font-display text-sm font-semibold text-white">
+            ✦ Ask Roamie
+          </p>
+          <p className="text-[11px] text-white/40">
+            {kind === "PACKAGE" ? "Knows this package"
+              : kind === "DESTINATION" ? "Knows this destination"
+              : kind === "BOOKING" ? "Knows your booking"
+              : kind === "PROVIDER" ? "Knows this provider"
+              : kind === "TRIP_PLAN" ? "Knows your itinerary"
+              : "Ask anything about Sri Lanka"}
+          </p>
         </div>
-        <button onClick={() => setOpen(false)} className="text-ink/50 hover:text-ink">
+        <button onClick={() => setOpen(false)}
+                className="text-white/40 hover:text-white">
           ✕
         </button>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <div className="text-sm text-ink/55">
-            <p>Ask me anything about your trip.</p>
+          <div>
+            <p className="text-sm text-white/50">
+              Ask me anything — I'll use what's on this page.
+            </p>
             <div className="mt-3 space-y-1.5">
-              {["What should I pack?", "Is the weather okay for day 2?", "How do I get there?"]
-                .map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setQuestion(s)}
-                    className="block rounded-lg bg-sand-100 px-3 py-1.5 text-left text-xs hover:bg-sand-300/50"
-                  >
-                    {s}
-                  </button>
-                ))}
+              {prompts.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => send(s)}
+                  className="block w-full rounded-lg border border-white/8 bg-white/5 px-3 py-2 text-left text-xs text-white/70 transition hover:border-saffron-400/40 hover:text-white"
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -79,10 +138,10 @@ export default function AskAssistant({ tripPlanId }) {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+            className={`max-w-[88%] rounded-xl px-3.5 py-2.5 text-sm ${
               m.role === "user"
-                ? "ml-auto bg-brand-600 text-white"
-                : "bg-sand-100 whitespace-pre-wrap"
+                ? "ml-auto bg-saffron-500 text-night-900"
+                : "whitespace-pre-wrap border border-white/8 bg-white/5 text-white/85"
             }`}
           >
             {m.text}
@@ -90,22 +149,30 @@ export default function AskAssistant({ tripPlanId }) {
         ))}
 
         {busy && (
-          <div className="w-16 rounded-xl bg-sand-100 px-3 py-2 text-sm text-ink/50">
-            …
+          <div className="flex gap-1 rounded-xl border border-white/8 bg-white/5 px-4 py-3">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/40"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
           </div>
         )}
+        <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={send} className="flex gap-2 border-t border-sand-300 p-3">
+      <form onSubmit={(e) => { e.preventDefault(); send(); }}
+            className="flex gap-2 border-t border-white/8 p-3">
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask a question…"
-          className="flex-1 rounded-lg border border-sand-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          className="flex-1 rounded-full border border-white/12 bg-slate-900 px-4 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-saffron-400"
         />
         <button
-          disabled={busy}
-          className="rounded-lg bg-brand-600 px-4 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          disabled={busy || !question.trim()}
+          className="rounded-full bg-saffron-500 px-4 text-sm font-medium text-night-900 transition hover:bg-saffron-400 disabled:opacity-30"
         >
           Send
         </button>

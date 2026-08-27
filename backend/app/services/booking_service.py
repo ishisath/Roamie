@@ -75,6 +75,7 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
         status=BookingStatus.PENDING,
         destination_id=data.destination_id,
         trip_plan_id=getattr(data, "trip_plan_id", None),
+        budget_total=getattr(data, "budget_total", None),
         start_date=data.start_date,
         end_date=data.end_date,
         start_time=data.start_time,
@@ -180,17 +181,77 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
 
 
 def confirm_booking(db: Session, booking: Booking) -> Booking:
-    """Called after payment succeeds."""
+    """Called after payment. Providers still have to accept."""
     booking.status = BookingStatus.CONFIRMED
+
     for item in booking.items:
-        item.provider_status = ProviderStatus.ACCEPTED
-        if item.service_type == ServiceType.DRIVER:
-            item.trip_status = TripStatus.CONFIRMED
         if item.provider_id:
+            # hold the dates while the provider decides
             _hold_dates(db, item.provider_id, booking.start_date, booking.end_date)
+
     db.commit()
     db.refresh(booking)
     return booking
+
+
+def respond_to_booking(db: Session, item: BookingItem, accept: bool,
+                       note: str | None = None) -> BookingItem:
+    """A guide or driver accepts or declines the work."""
+    from app.services import notification_service
+
+    if item.provider_status != ProviderStatus.PENDING:
+        raise HTTPException(400, f"You've already {item.provider_status.lower()} this booking")
+
+    booking = item.booking
+    if booking.status == BookingStatus.CANCELLED:
+        raise HTTPException(400, "This booking was cancelled")
+
+    provider = db.query(User).filter(User.id == item.provider_id).first()
+    name = provider.full_name if provider else "Your provider"
+
+    if accept:
+        item.provider_status = ProviderStatus.ACCEPTED
+        if item.service_type == ServiceType.DRIVER:
+            item.trip_status = TripStatus.CONFIRMED
+
+        notification_service.notify(
+            db, booking.traveler_id, "BOOKING_ACCEPTED",
+            f"{name} accepted your booking",
+            f"{booking.reference} is locked in for {booking.start_date}.",
+            f"/bookings/{booking.id}",
+        )
+    else:
+        item.provider_status = ProviderStatus.DECLINED
+        _release_dates(db, item.provider_id, booking.start_date, booking.end_date)
+
+        notification_service.notify(
+            db, booking.traveler_id, "BOOKING_DECLINED",
+            f"{name} can't take this booking",
+            note or "You'll be refunded, and you can choose someone else.",
+            f"/bookings/{booking.id}",
+        )
+
+        # if nobody is left on the booking, cancel and refund it
+        remaining = [i for i in booking.items
+                     if i.provider_status != ProviderStatus.DECLINED]
+        if not remaining:
+            booking.status = BookingStatus.CANCELLED
+            booking.cancelled_reason = f"Declined by {name}"
+
+            from app.models.payment import Payment
+            from app.core.enums import PaymentStatus
+            paid = (db.query(Payment)
+                    .filter(Payment.booking_id == booking.id,
+                            Payment.status == PaymentStatus.SUCCESS).first())
+            if paid:
+                from app.services import payment_service
+                payment_service.refund_payment(
+                    db, paid.id, None, f"Declined by {name}"
+                )
+
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def cancel_booking(db: Session, booking: Booking, reason: str | None) -> Booking:
@@ -205,7 +266,7 @@ def cancel_booking(db: Session, booking: Booking, reason: str | None) -> Booking
             _release_dates(db, item.provider_id, booking.start_date, booking.end_date)
 
     from app.services import budget_service
-    budget_service.remove_booking_expense(db, booking)
+    budget_service.remove_booking_budget(db, booking)
 
     db.commit()
     db.refresh(booking)

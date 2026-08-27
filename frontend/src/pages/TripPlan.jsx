@@ -60,6 +60,9 @@ export default function TripPlan() {
   return (
     <div className="min-h-screen bg-night-900">
       <Navbar />
+               <Link to="/plans" className="text-sm text-white/50 hover:text-white">
+            ← All itineraries
+          </Link>
 
       {/* header */}
       <section className="relative overflow-hidden border-b border-white/8">

@@ -3,11 +3,18 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.enums import ExpenseCategory, ServiceType
 from app.models.payment import Expense, TripBudget
 from app.services import notification_service
 
 WARNING_AT = Decimal("0.50")
 CRITICAL_AT = Decimal("0.80")
+
+CATEGORY_FOR = {
+    ServiceType.PACKAGE: ExpenseCategory.PACKAGE,
+    ServiceType.GUIDE: ExpenseCategory.GUIDE,
+    ServiceType.DRIVER: ExpenseCategory.DRIVER,
+}
 
 
 def summarise(db: Session, budget: TripBudget) -> dict:
@@ -33,7 +40,6 @@ def summarise(db: Session, budget: TripBudget) -> dict:
         status = "OK"
         message = None
 
-    # burn rate projection
     daily_burn = projected = None
     days_elapsed = days_total = None
     if budget.start_date and budget.end_date:
@@ -82,87 +88,73 @@ def check_thresholds(db: Session, budget: TripBudget, before: float, after: floa
                 body = f"You've spent your full budget for {budget.title}."
             else:
                 title = f"You've used {label} your budget"
-                body = f"{budget.title}: {after:.0f}% of {budget.currency} {budget.total_budget:,.0f} spent."
+                body = (f"{budget.title}: {after:.0f}% of {budget.currency} "
+                        f"{budget.total_budget:,.0f} spent.")
             notification_service.notify(
-                db, budget.traveler_id, "BUDGET_ALERT", title, body, f"/budget/{budget.id}"
+                db, budget.traveler_id, "BUDGET_ALERT", title, body, "/budget"
             )
 
-from datetime import date as date_type
-from uuid import UUID
 
-from app.core.enums import BookingType, ExpenseCategory, ServiceType
+def create_for_booking(db: Session, booking, total_budget) -> TripBudget | None:
+    """A booking gets its own budget, seeded with what was paid.
 
+    Only ever called with an explicit total from the traveller at checkout.
+    Free-standing budgets are never touched by the system.
+    """
+    if not total_budget:
+        return None
 
-CATEGORY_FOR = {
-    ServiceType.PACKAGE: ExpenseCategory.PACKAGE,
-    ServiceType.GUIDE: ExpenseCategory.GUIDE,
-    ServiceType.DRIVER: ExpenseCategory.DRIVER,
-}
+    existing = db.query(TripBudget).filter(TripBudget.booking_id == booking.id).first()
+    if existing:
+        return existing
 
+    title = booking.reference
+    if booking.items:
+        first = booking.items[0]
+        if first.package_id:
+            from app.models.package import Package
+            pkg = db.query(Package).filter(Package.id == first.package_id).first()
+            if pkg:
+                title = pkg.title
 
-def active_budget_for(db: Session, traveler_id, on_date: date_type) -> TripBudget | None:
-    """Find the budget that covers this date, else the most recent one."""
-    dated = (db.query(TripBudget)
-             .filter(TripBudget.traveler_id == traveler_id,
-                     TripBudget.start_date <= on_date,
-                     TripBudget.end_date >= on_date)
-             .order_by(TripBudget.created_at.desc()).first())
-    if dated:
-        return dated
+    budget = TripBudget(
+        traveler_id=booking.traveler_id,
+        booking_id=booking.id,
+        trip_plan_id=booking.trip_plan_id,
+        title=title,
+        total_budget=Decimal(str(total_budget)),
+        currency=booking.currency,
+        start_date=booking.start_date,
+        end_date=booking.end_date or booking.start_date,
+    )
+    db.add(budget)
+    db.flush()
 
-    return (db.query(TripBudget)
-            .filter(TripBudget.traveler_id == traveler_id)
-            .order_by(TripBudget.created_at.desc()).first())
-
-
-def record_booking_expense(db: Session, booking) -> list[Expense]:
-    """Write one expense line per booking item after payment succeeds."""
-    budget = active_budget_for(db, booking.traveler_id, booking.start_date)
-    if not budget:
-        return []
-
-    # don't double-count if this runs twice
-    if db.query(Expense).filter(Expense.booking_id == booking.id).first():
-        return []
-
-    before = summarise(db, budget)["percent_used"]
-    created = []
-
+    # seed with what they actually paid, one line per service
     for item in booking.items:
-        category = CATEGORY_FOR.get(item.service_type, ExpenseCategory.OTHER)
-        note = f"{item.service_type.title()} · booking {booking.reference}"
-
-        e = Expense(
+        db.add(Expense(
             budget_id=budget.id,
             traveler_id=booking.traveler_id,
-            category=category,
+            category=CATEGORY_FOR.get(item.service_type, ExpenseCategory.OTHER),
             amount=item.amount,
-            note=note,
+            note=f"{item.service_type.title()} · {booking.reference}",
             spent_on=booking.start_date,
             booking_id=booking.id,
-        )
-        db.add(e)
-        created.append(e)
+        ))
 
     db.flush()
 
-    after = summarise(db, budget)["percent_used"]
-    check_thresholds(db, budget, before, after)
-
     notification_service.notify(
-        db, booking.traveler_id, "BUDGET_UPDATED",
-        "Added to your budget",
-        f"{booking.currency} {booking.total_amount:,.0f} from booking "
-        f"{booking.reference} was added to “{budget.title}”.",
-        f"/budget",
+        db, booking.traveler_id, "BUDGET_CREATED",
+        f"Budget created for {title}",
+        f"Track what you spend on this trip. "
+        f"{booking.currency} {booking.total_amount:,.0f} is already logged.",
+        "/budget",
     )
+    return budget
 
-    return created
 
-
-def remove_booking_expense(db: Session, booking) -> int:
-    """Reverse the expense lines if a booking is refunded or cancelled."""
-    rows = db.query(Expense).filter(Expense.booking_id == booking.id).all()
-    for r in rows:
-        db.delete(r)
-    return len(rows)
+def remove_booking_budget(db: Session, booking) -> None:
+    """On refund or cancellation, drop the auto expenses but keep the budget
+    so the traveller doesn't lose anything they added themselves."""
+    db.query(Expense).filter(Expense.booking_id == booking.id).delete()

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import ReviewList from "../components/ReviewList";
+import AskAssistant from "../components/AskAssistant";
 import { useParallax, usePointer } from "../hooks/useTilt";
 
 function List({ title, items, tone = "good" }) {
@@ -202,9 +203,7 @@ export default function PackageDetail() {
             <List title="Not included" items={p.excluded} tone="bad" />
           </div>
 
-          <div className="[&_h3]:text-saffron-400 [&_p]:text-white/75">
-            <ReviewList type="PACKAGE" id={p.id} />
-          </div>
+          <ReviewList type="PACKAGE" id={p.id} dark />
         </div>
 
         {/* booking panel */}
@@ -292,6 +291,7 @@ export default function PackageDetail() {
         </aside>
       </main>
 
+      <AskAssistant contextType="PACKAGE" contextId={p.id} label="Ask about this package" />
       <Footer />
     </div>
   );

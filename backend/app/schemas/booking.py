@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class BookingItemIn(BaseModel):
-    service_type: str          # PACKAGE | GUIDE | DRIVER
+    service_type: str
     package_id: UUID | None = None
     provider_id: UUID | None = None
     vehicle_id: UUID | None = None
@@ -14,9 +14,10 @@ class BookingItemIn(BaseModel):
 
 
 class BookingCreate(BaseModel):
-    booking_type: str          # PACKAGE | GUIDE | DRIVER | GUIDE_DRIVER
+    booking_type: str
     destination_id: UUID | None = None
     trip_plan_id: UUID | None = None
+    budget_total: Decimal | None = None
     start_date: date
     end_date: date | None = None
     start_time: time | None = None
@@ -41,12 +42,46 @@ class BookingCreate(BaseModel):
         return self
 
 
-class ProviderBrief(BaseModel):
+class VehicleInfo(BaseModel):
+    id: UUID
+    vehicle_type: str
+    model: str | None = None
+    reg_no: str
+    seats: int
+    is_ac: bool | None = None
+    luggage_capacity: str | None = None
+    facilities: list[str] | None = None
+    photos: list[str] | None = None
+
+
+class ProviderInfo(BaseModel):
     id: UUID
     full_name: str
-    avatar_url: str | None = None
+    role: str
     phone: str | None = None
-    model_config = {"from_attributes": True}
+    email: str | None = None
+    avatar_url: str | None = None
+    languages: list[str] | None = None
+    years_experience: int | None = None
+    rating_avg: Decimal | None = None
+    rating_count: int | None = None
+
+
+class PackageInfo(BaseModel):
+    id: UUID
+    title: str
+    duration_days: int
+    price: Decimal
+    included: list[str] | None = None
+    excluded: list[str] | None = None
+    activities: list[str] | None = None
+    transport_included: bool
+    vehicle_type: str | None = None
+    vehicle_seats: int | None = None
+    is_ac: bool | None = None
+    pickup_info: str | None = None
+    dropoff_info: str | None = None
+    photo: str | None = None
 
 
 class BookingItemOut(BaseModel):
@@ -60,7 +95,26 @@ class BookingItemOut(BaseModel):
     provider_net: Decimal
     provider_status: str
     trip_status: str | None = None
+    provider: ProviderInfo | None = None
+    package: PackageInfo | None = None
+    vehicle: VehicleInfo | None = None
     model_config = {"from_attributes": True}
+
+
+class DestinationInfo(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    region: str | None = None
+    photo: str | None = None
+
+
+class TravelerInfo(BaseModel):
+    id: UUID
+    full_name: str
+    phone: str | None = None
+    email: str | None = None
+    country: str | None = None
 
 
 class BookingOut(BaseModel):
@@ -81,7 +135,10 @@ class BookingOut(BaseModel):
     currency: str
     payment_status: str
     notes: str | None = None
+    cancelled_reason: str | None = None
     items: list[BookingItemOut] = []
+    destination: DestinationInfo | None = None
+    traveler: TravelerInfo | None = None
     model_config = {"from_attributes": True}
 
 
@@ -92,3 +149,7 @@ class StatusUpdate(BaseModel):
 
 class CancelIn(BaseModel):
     reason: str | None = None
+
+class ProviderResponse(BaseModel):
+    accept: bool
+    note: str | None = None

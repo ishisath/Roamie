@@ -14,6 +14,13 @@ class BudgetCreate(BaseModel):
     trip_plan_id: UUID | None = None
 
 
+class BudgetUpdate(BaseModel):
+    title: str | None = None
+    total_budget: Decimal | None = Field(None, gt=0)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 class ExpenseCreate(BaseModel):
     category: str = "OTHER"
     amount: Decimal = Field(gt=0)
@@ -45,14 +52,16 @@ class BudgetOut(BaseModel):
     currency: str
     start_date: date | None = None
     end_date: date | None = None
+    booking_id: UUID | None = None
     model_config = {"from_attributes": True}
 
 
 class BudgetSummary(BudgetOut):
+    booking_reference: str | None = None
     total_spent: Decimal
     remaining: Decimal
     percent_used: float
-    status: str                 # OK | WARNING | CRITICAL | OVER
+    status: str
     message: str | None = None
     daily_burn: Decimal | None = None
     projected_total: Decimal | None = None
@@ -60,16 +69,3 @@ class BudgetSummary(BudgetOut):
     days_total: int | None = None
     by_category: list[CategoryTotal] = []
     expenses: list[ExpenseOut] = []
-
-class ExpenseOut(BaseModel):
-    id: UUID
-    category: str
-    amount: Decimal
-    note: str | None = None
-    spent_on: date
-    booking_id: UUID | None = None
-    model_config = {"from_attributes": True}
-
-    @property
-    def is_automatic(self) -> bool:
-        return self.booking_id is not None

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import ReviewList from "../components/ReviewList";
+import AskAssistant from "../components/AskAssistant";
 
 export default function ProviderProfile() {
   const { userId } = useParams();
@@ -311,7 +312,8 @@ export default function ProviderProfile() {
           </div>
         </aside>
       </main>
-
+      <AskAssistant contextType="PROVIDER" contextId={p.user_id} label="Ask about them" />
+      <Footer />
       <Footer />
     </div>
   );

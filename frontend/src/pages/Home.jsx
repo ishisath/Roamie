@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import PhotoCard from "../components/PhotoCard";
 import { useParallax, usePointer } from "../hooks/useTilt";
+import AskAssistant from "../components/AskAssistant";
 
 const STEPS = [
   { t: "Discover", d: "Browse destinations, or let the AI planner draft an itinerary from your budget and interests." },
@@ -336,7 +337,7 @@ export default function Home() {
           <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-saffron-500/15 blur-3xl" />
         </div>
       </section>
-
+      
       <Footer />
     </div>
   );

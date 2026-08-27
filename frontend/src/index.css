@@ -53,6 +53,14 @@
   --color-moss-50:  #EDF2E4;
   --color-moss-500: #5E7B3A;
 
+    /* Dashboard surfaces — lifted, not pitch black */
+    /* Dashboard surfaces — neutral dark, no green cast */
+  --color-slate-900: #14161A;
+  --color-slate-800: #1B1E24;
+  --color-slate-700: #24282F;
+  --color-slate-600: #30353E;
+  --color-slate-500: #454B57;
+
 }
 
 @layer base {

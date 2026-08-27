@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.models.payment import Expense, TripBudget
 from app.models.user import User
 from app.schemas.budget import (BudgetCreate, BudgetOut, BudgetSummary,
-                                ExpenseCreate, ExpenseOut)
+                                BudgetUpdate, ExpenseCreate, ExpenseOut)
 from app.services import budget_service
 
 router = APIRouter(prefix="/budget", tags=["budget"],
@@ -49,8 +49,49 @@ def budget_summary(budget_id: UUID,
                    user: User = Depends(require_role(Role.TRAVELER)),
                    db: Session = Depends(get_db)):
     b = _own(db, budget_id, user)
+
+    reference = None
+    if b.booking_id:
+        from app.models.booking import Booking
+        bk = db.query(Booking).filter(Booking.id == b.booking_id).first()
+        reference = bk.reference if bk else None
+
     return {**BudgetOut.model_validate(b).model_dump(),
+            "booking_reference": reference,
             **budget_service.summarise(db, b)}
+
+
+@router.patch("/{budget_id}", response_model=BudgetOut)
+def update_budget(budget_id: UUID, data: BudgetUpdate,
+                  user: User = Depends(require_role(Role.TRAVELER)),
+                  db: Session = Depends(get_db)):
+    b = _own(db, budget_id, user)
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(b, k, v)
+    db.commit()
+    db.refresh(b)
+    return b
+
+
+@router.delete("/{budget_id}", status_code=204)
+def delete_budget(budget_id: UUID,
+                  user: User = Depends(require_role(Role.TRAVELER)),
+                  db: Session = Depends(get_db)):
+    b = _own(db, budget_id, user)
+
+    linked = (db.query(Expense)
+              .filter(Expense.budget_id == b.id,
+                      Expense.booking_id.isnot(None)).count())
+    if linked:
+        raise HTTPException(
+            400,
+            f"This budget has {linked} expense{'s' if linked > 1 else ''} from Roamie "
+            f"bookings. Cancel those bookings first, or keep the budget for your records.",
+        )
+
+    db.query(Expense).filter(Expense.budget_id == b.id).delete()
+    db.delete(b)
+    db.commit()
 
 
 @router.post("/{budget_id}/expenses", response_model=ExpenseOut, status_code=201)

@@ -32,6 +32,7 @@ class Booking(Base, TimestampMixin):
     items = relationship("BookingItem", back_populates="booking",
                          cascade="all, delete-orphan")
     trip_plan_id = Column(UUID(as_uuid=True), ForeignKey("trip_plans.id"), index=True)
+    budget_total = Column(Numeric(10, 2))
 
 
 class BookingItem(Base, TimestampMixin):
