@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { providersApi } from "../api/endpoints";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { providersApi, aiApi } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -8,9 +8,13 @@ import ReviewList from "../components/ReviewList";
 
 export default function ProviderProfile() {
   const { userId } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const planId = params.get("plan");
   const [p, setP] = useState(null);
+  const [plan, setPlan] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -18,7 +22,11 @@ export default function ProviderProfile() {
     providersApi.profile(userId)
       .then((r) => setP(r.data))
       .catch(() => setError("We couldn't find that provider."));
-  }, [userId]);
+
+    if (planId) {
+      aiApi.planDetail(planId).then((r) => setPlan(r.data)).catch(() => {});
+    }
+  }, [userId, planId]);
 
   if (error) {
     return (
@@ -44,7 +52,9 @@ export default function ProviderProfile() {
 
   const book = () => {
     if (!user) return navigate("/login");
-    navigate(`/book/provider/${p.user_id}?type=${subjectType}`);
+    const q = new URLSearchParams({ type: subjectType });
+    if (planId) q.set("plan", planId);
+    navigate(`/book/provider/${p.user_id}?${q.toString()}`);
   };
 
   return (
@@ -123,9 +133,7 @@ export default function ProviderProfile() {
 
       <main className="mx-auto grid max-w-5xl gap-12 px-6 py-14 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
-          {p.bio && (
-            <p className="text-lg leading-relaxed text-white/80">{p.bio}</p>
-          )}
+          {p.bio && <p className="text-lg leading-relaxed text-white/80">{p.bio}</p>}
 
           <div className="grid gap-8 sm:grid-cols-2">
             {p.languages?.length > 0 && (
@@ -243,51 +251,63 @@ export default function ProviderProfile() {
         </div>
 
         <aside>
-          <div className="sticky top-24 rounded-[18px] border border-white/12 bg-night-800/80 p-6 backdrop-blur">
-            <h3 className="font-display text-lg font-semibold text-white">Availability</h3>
-            {p.available_dates.length === 0 ? (
-              <p className="mt-2 text-sm text-white/50">
-                Fully booked for the next 60 days.
-              </p>
-            ) : (
-              <>
-                <p className="mt-1 text-sm text-white/55">
-                  {p.available_dates.length} days free in the next two months.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {p.available_dates.slice(0, 14).map((d) => (
-                    <span key={d} className="rounded-lg bg-white/8 px-2 py-1 text-xs text-white/70">
-                      {new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                    </span>
-                  ))}
-                  {p.available_dates.length > 14 && (
-                    <span className="px-2 py-1 text-xs text-white/35">
-                      +{p.available_dates.length - 14}
-                    </span>
-                  )}
-                </div>
-              </>
-            )}
-
-            {p.daily_rate > 0 && (
-              <div className="mt-6 border-t border-white/10 pt-5">
-                <p className="eyebrow text-white/40">Day rate</p>
-                <p className="mt-1 font-display text-3xl font-bold text-white">
-                  <span className="text-base font-medium text-white/50">LKR </span>
-                  {Number(p.daily_rate).toLocaleString()}
+          <div className="sticky top-24 space-y-4">
+            {plan && (
+              <div className="rounded-[18px] border border-saffron-500/30 bg-saffron-500/10 p-5">
+                <p className="eyebrow text-saffron-400">Itinerary ready</p>
+                <p className="mt-1.5 font-display font-semibold text-white">{plan.title}</p>
+                <p className="mt-1 text-xs text-white/60">
+                  {plan.items.length} stops · shared with {p.full_name.split(" ")[0]} once booked
                 </p>
               </div>
             )}
 
-            <button
-              onClick={book}
-              className="mt-6 w-full rounded-full bg-saffron-500 py-3.5 font-medium text-night-900 transition hover:bg-saffron-400"
-            >
-              {user ? `Book this ${subjectType.toLowerCase()}` : "Sign in to book"}
-            </button>
-            <p className="mt-3 text-center text-xs text-white/40">
-              You're choosing this {subjectType.toLowerCase()} directly.
-            </p>
+            <div className="rounded-[18px] border border-white/12 bg-night-800/80 p-6 backdrop-blur">
+              <h3 className="font-display text-lg font-semibold text-white">Availability</h3>
+              {p.available_dates.length === 0 ? (
+                <p className="mt-2 text-sm text-white/50">
+                  Fully booked for the next 60 days.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-white/55">
+                    {p.available_dates.length} days free in the next two months.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {p.available_dates.slice(0, 14).map((d) => (
+                      <span key={d} className="rounded-lg bg-white/8 px-2 py-1 text-xs text-white/70">
+                        {new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </span>
+                    ))}
+                    {p.available_dates.length > 14 && (
+                      <span className="px-2 py-1 text-xs text-white/35">
+                        +{p.available_dates.length - 14}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {p.daily_rate > 0 && (
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <p className="eyebrow text-white/40">Day rate</p>
+                  <p className="mt-1 font-display text-3xl font-bold text-white">
+                    <span className="text-base font-medium text-white/50">LKR </span>
+                    {Number(p.daily_rate).toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={book}
+                className="mt-6 w-full rounded-full bg-saffron-500 py-3.5 font-medium text-night-900 transition hover:bg-saffron-400"
+              >
+                {user ? `Book this ${subjectType.toLowerCase()}` : "Sign in to book"}
+              </button>
+              <p className="mt-3 text-center text-xs text-white/40">
+                You're choosing this {subjectType.toLowerCase()} directly.
+              </p>
+            </div>
           </div>
         </aside>
       </main>

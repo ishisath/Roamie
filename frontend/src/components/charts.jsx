@@ -74,3 +74,24 @@ export function SplitChart({ data, nameKey, valueKey, height = 240 }) {
     </ResponsiveContainer>
   );
 }
+
+export const ADMIN_PALETTE = ["#14523F", "#E39A22", "#2E7295", "#7A4E86", "#C0603C", "#5E7B3A"];
+
+export function StackedChart({ data, xKey, series, height = 260 }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: AXIS }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: AXIS }} axisLine={false} tickLine={false} />
+        <Tooltip cursor={{ fill: "rgba(20,82,63,0.05)" }} content={<ChartTip />} />
+        {series.map((s, i) => (
+          <Bar key={s.key} dataKey={s.key} stackId="a"
+               fill={ADMIN_PALETTE[i % ADMIN_PALETTE.length]}
+               radius={i === series.length - 1 ? [6, 6, 0, 0] : 0}
+               maxBarSize={44} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

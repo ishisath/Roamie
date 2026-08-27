@@ -28,13 +28,13 @@ def _check_provider(db: Session, provider_id, expected_role: str) -> User:
     if not user:
         raise HTTPException(404, "Provider not found")
     if user.role != expected_role:
-        raise HTTPException(400, f"User is not a {expected_role.lower()}")
+        raise HTTPException(400, f"That user isn't a {expected_role.lower()}")
     if not user.is_active:
-        raise HTTPException(400, "Provider account is inactive")
+        raise HTTPException(400, "That provider's account is inactive")
 
     profile = user.guide_profile if expected_role == Role.GUIDE else user.driver_profile
     if not profile or profile.verification_status != "APPROVED":
-        raise HTTPException(400, "Provider is not verified")
+        raise HTTPException(400, "That provider hasn't been verified yet")
     return user
 
 
@@ -47,7 +47,7 @@ def _check_availability(db: Session, provider_id, start: date, end: date | None)
                        Availability.status != AvailabilityStatus.AVAILABLE)
                .first())
     if blocked:
-        raise HTTPException(409, f"Provider is unavailable on {blocked.date}")
+        raise HTTPException(409, f"That provider isn't free on {blocked.date}")
 
 
 def _hold_dates(db: Session, provider_id, start: date, end: date | None):
@@ -74,6 +74,7 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
         booking_type=data.booking_type,
         status=BookingStatus.PENDING,
         destination_id=data.destination_id,
+        trip_plan_id=getattr(data, "trip_plan_id", None),
         start_date=data.start_date,
         end_date=data.end_date,
         start_time=data.start_time,
@@ -95,8 +96,9 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
             if not pkg:
                 raise HTTPException(404, "Package not found")
             if data.num_travelers > pkg.max_travelers:
-                raise HTTPException(400,
-                    f"Package allows a maximum of {pkg.max_travelers} travelers")
+                raise HTTPException(
+                    400, f"This package takes a maximum of {pkg.max_travelers} travellers"
+                )
 
             amount = Decimal(str(pkg.price)) * data.num_travelers
             if pkg.extra_transport_cost:
@@ -132,11 +134,11 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
             days = ((data.end_date - data.start_date).days + 1) if data.end_date else 1
 
             if rate > 0:
-                amount = rate * days          # server decides the price
+                amount = rate * days
             elif item.amount is not None:
                 amount = Decimal(str(item.amount))
             else:
-                raise HTTPException(400, f"No rate set for this {st.lower()}")
+                raise HTTPException(400, f"No day rate set for this {st.lower()}")
 
             vehicle_id = None
             if st == ServiceType.DRIVER and item.vehicle_id:
@@ -144,8 +146,11 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
                 if not v:
                     raise HTTPException(404, "Vehicle not found")
                 if v.seats < data.num_travelers:
-                    raise HTTPException(400,
-                        f"Vehicle seats {v.seats} is fewer than {data.num_travelers} travelers")
+                    raise HTTPException(
+                        400,
+                        f"That vehicle seats {v.seats}, but you have "
+                        f"{data.num_travelers} travellers",
+                    )
                 vehicle_id = v.id
 
             fee, net = _split_fee(amount)
@@ -159,14 +164,14 @@ def create_booking(db: Session, traveler: User, data) -> Booking:
         else:
             raise HTTPException(400, f"Unknown service type {st}")
 
-        booking.total_amount = total
+    booking.total_amount = total
 
     from app.services import notification_service
     items = db.query(BookingItem).filter(BookingItem.booking_id == booking.id).all()
     notification_service.notify_many(
         db, [i.provider_id for i in items],
         "BOOKING_REQUEST", "New booking request",
-        f"A traveler requested {booking.booking_type} for {booking.start_date}.",
+        f"A traveller requested {booking.booking_type} for {booking.start_date}.",
     )
 
     db.commit()
@@ -190,12 +195,18 @@ def confirm_booking(db: Session, booking: Booking) -> Booking:
 
 def cancel_booking(db: Session, booking: Booking, reason: str | None) -> Booking:
     if booking.status in (BookingStatus.COMPLETED, BookingStatus.CANCELLED):
-        raise HTTPException(400, f"Cannot cancel a {booking.status.lower()} booking")
+        raise HTTPException(400, f"This booking is already {booking.status.lower()}")
+
     booking.status = BookingStatus.CANCELLED
     booking.cancelled_reason = reason
+
     for item in booking.items:
         if item.provider_id:
             _release_dates(db, item.provider_id, booking.start_date, booking.end_date)
+
+    from app.services import budget_service
+    budget_service.remove_booking_expense(db, booking)
+
     db.commit()
     db.refresh(booking)
     return booking
@@ -206,11 +217,11 @@ def update_trip_status(db: Session, item: BookingItem, status: str,
     order = [TripStatus.CONFIRMED, TripStatus.ON_THE_WAY, TripStatus.PICKED_UP,
              TripStatus.STARTED, TripStatus.COMPLETED]
     if status not in order:
-        raise HTTPException(400, "Invalid trip status")
+        raise HTTPException(400, "That isn't a valid trip status")
 
     current = item.trip_status or TripStatus.CONFIRMED
     if order.index(status) <= order.index(current):
-        raise HTTPException(400, f"Cannot move from {current} back to {status}")
+        raise HTTPException(400, f"A trip can't go from {current} back to {status}")
 
     item.trip_status = status
     db.add(TripStatusEvent(booking_item_id=item.id, status=status, note=note))

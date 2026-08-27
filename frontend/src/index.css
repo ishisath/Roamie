@@ -37,6 +37,22 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --radius-card: 14px;
+  /* Admin signal colours */
+  --color-plum-50:  #F3EBF5;
+  --color-plum-500: #7A4E86;
+  --color-plum-600: #653F70;
+
+  --color-clay-50:  #FBEDE8;
+  --color-clay-500: #C0603C;
+  --color-clay-600: #A24C2C;
+
+  --color-sky-50:   #E6F0F5;
+  --color-sky-500:  #2E7295;
+  --color-sky-600:  #235B78;
+
+  --color-moss-50:  #EDF2E4;
+  --color-moss-500: #5E7B3A;
+
 }
 
 @layer base {
@@ -138,3 +154,4 @@
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
 }
+

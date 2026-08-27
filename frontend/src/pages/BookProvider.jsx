@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { providersApi, bookingsApi, paymentsApi, destinationsApi } from "../api/endpoints";
+import { providersApi, bookingsApi, paymentsApi, destinationsApi,
+         aiApi } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
+import ItineraryPreview from "../components/ItineraryPreview";
 
 const STEPS = ["Details", "Payment", "Confirmed"];
 
@@ -13,11 +15,14 @@ export default function BookProvider() {
   const { user } = useAuth();
 
   const primaryType = (params.get("type") || "GUIDE").toUpperCase();
+  const planId = params.get("plan");
+  const otherType = primaryType === "GUIDE" ? "DRIVER" : "GUIDE";
 
   const [provider, setProvider] = useState(null);
-  const [second, setSecond] = useState(null);        // optional other provider
+  const [second, setSecond] = useState(null);
   const [secondOptions, setSecondOptions] = useState([]);
   const [destinations, setDestinations] = useState([]);
+  const [plan, setPlan] = useState(null);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,18 +39,32 @@ export default function BookProvider() {
     notes: "",
   });
 
-  const otherType = primaryType === "GUIDE" ? "DRIVER" : "GUIDE";
-
   useEffect(() => {
     providersApi.profile(userId).then((r) => setProvider(r.data))
-      .catch(() => setError("Provider not found"));
+      .catch(() => setError("We couldn't find that provider."));
 
     destinationsApi.search({ size: 50 })
       .then((r) => setDestinations(r.data.items)).catch(() => {});
 
     const call = otherType === "GUIDE" ? providersApi.guides : providersApi.drivers;
     call({ sort: "rating" }).then((r) => setSecondOptions(r.data)).catch(() => {});
-  }, [userId, otherType]);
+
+    if (planId) {
+      aiApi.planDetail(planId)
+        .then((r) => {
+          setPlan(r.data);
+          // prefill dates and destination from the plan
+          setForm((f) => ({
+            ...f,
+            start_date: f.start_date || r.data.start_date || "",
+            end_date: f.end_date || r.data.end_date || "",
+            destination_id: f.destination_id || r.data.destination_id || "",
+            num_travelers: r.data.inputs?.num_people || f.num_travelers,
+          }));
+        })
+        .catch(() => {});
+    }
+  }, [userId, otherType, planId]);
 
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -68,6 +87,7 @@ export default function BookProvider() {
       const { data } = await bookingsApi.create({
         booking_type: second ? "GUIDE_DRIVER" : primaryType,
         destination_id: form.destination_id || null,
+        trip_plan_id: planId || null,
         start_date: form.start_date,
         end_date: form.end_date || null,
         num_travelers: Number(form.num_travelers),
@@ -82,7 +102,7 @@ export default function BookProvider() {
       setIntent(res.data);
       setStep(1);
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not create booking.");
+      setError(err.response?.data?.detail || "We couldn't create that booking.");
     } finally {
       setBusy(false);
     }
@@ -98,7 +118,7 @@ export default function BookProvider() {
       });
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.detail || "Payment failed.");
+      setError(err.response?.data?.detail || "The payment didn't complete.");
     } finally {
       setBusy(false);
     }
@@ -106,43 +126,52 @@ export default function BookProvider() {
 
   if (error && !provider) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-[#F1EEE6]">
         <Navbar />
-        <p className="py-32 text-center text-ink/60">{error}</p>
+        <p className="py-40 text-center text-ink-soft">{error}</p>
       </div>
     );
   }
   if (!provider) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-[#F1EEE6]">
         <Navbar />
-        <div className="mx-auto max-w-3xl px-6 py-12">
-          <div className="h-64 animate-pulse rounded-xl bg-sand-100" />
+        <div className="mx-auto max-w-3xl px-6 py-14">
+          <div className="h-64 animate-pulse rounded-2xl bg-white" />
         </div>
       </div>
     );
   }
 
   const field =
-    "mt-1 w-full rounded-lg border border-sand-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500";
+    "mt-1.5 w-full rounded-lg border border-sand-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500";
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#F1EEE6]">
       <Navbar />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <ol className="flex items-center gap-3">
+        {/* stepper */}
+        <ol className="flex items-center">
           {STEPS.map((s, i) => (
-            <li key={s} className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
-                  i <= step ? "bg-brand-600 text-white" : "bg-sand-100 text-ink/50"
+            <li key={s} className="flex flex-1 items-center last:flex-none">
+              <div className="flex items-center gap-2.5">
+                <span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition ${
+                  i < step ? "bg-brand-600 text-white"
+                  : i === step ? "bg-saffron-500 text-night-900"
+                  : "bg-sand-200 text-ink-soft"
                 }`}>
                   {i < step ? "✓" : i + 1}
                 </span>
-                <span className={`text-sm ${i <= step ? "font-medium" : "text-ink/50"}`}>{s}</span>
+                <span className={`text-sm ${i <= step ? "font-medium" : "text-ink-soft"}`}>
+                  {s}
+                </span>
               </div>
-              {i < STEPS.length - 1 && <span className="h-px w-8 bg-sand-300" />}
+              {i < STEPS.length - 1 && (
+                <span className={`mx-3 h-0.5 flex-1 rounded-full ${
+                  i < step ? "bg-brand-600" : "bg-sand-200"
+                }`} />
+              )}
             </li>
           ))}
         </ol>
@@ -153,39 +182,73 @@ export default function BookProvider() {
           </div>
         )}
 
-        {/* Step 1 */}
+        {/* ---------- STEP 1 ---------- */}
         {step === 0 && (
-          <div className="mt-8 space-y-6">
-            <div className="rounded-xl border border-sand-300 bg-white p-5">
-              <p className="text-xs text-ink/55">You're booking</p>
-              <p className="mt-1 font-semibold">{provider.full_name}</p>
-              <p className="text-sm text-ink/60">
-                {primaryType === "GUIDE" ? "Tour guide" : "Driver"}
-                {provider.daily_rate > 0 &&
-                  ` · LKR ${Number(provider.daily_rate).toLocaleString()} per day`}
-              </p>
+          <div className="mt-8 space-y-5">
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <div className="flex items-center gap-4">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 font-display text-xl font-bold text-white">
+                  {provider.full_name.charAt(0)}
+                </span>
+                <div>
+                  <p className="eyebrow text-ink-soft">You're booking</p>
+                  <p className="mt-0.5 font-display text-lg font-semibold">
+                    {provider.full_name}
+                  </p>
+                  <p className="text-sm text-ink-soft">
+                    {primaryType === "GUIDE" ? "Tour guide" : "Driver"}
+                    {provider.daily_rate > 0 &&
+                      ` · LKR ${Number(provider.daily_rate).toLocaleString()} per day`}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-sand-300 bg-white p-5">
-              <h2 className="font-semibold">Trip details</h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {plan && (
+              <div className="overflow-hidden rounded-2xl border border-brand-200 bg-brand-50">
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <div>
+                    <p className="eyebrow text-brand-700">Itinerary attached</p>
+                    <p className="mt-1 font-display font-semibold">{plan.title}</p>
+                    <p className="mt-0.5 text-sm text-ink-soft">
+                      {provider.full_name.split(" ")[0]} will see this once the booking is confirmed.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white">
+                    {plan.items.length} stops
+                  </span>
+                </div>
+                <details className="border-t border-brand-200/60 px-6 py-4">
+                  <summary className="cursor-pointer text-sm font-medium text-brand-700">
+                    Preview the plan
+                  </summary>
+                  <div className="mt-4">
+                    <ItineraryPreview plan={plan} />
+                  </div>
+                </details>
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <h2 className="font-display text-lg font-semibold">Trip details</h2>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium">Start date</label>
+                  <label className="eyebrow text-ink-soft">Start date</label>
                   <input type="date" name="start_date" required
                          value={form.start_date} onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">End date</label>
+                  <label className="eyebrow text-ink-soft">End date</label>
                   <input type="date" name="end_date" value={form.end_date}
                          onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Travellers</label>
+                  <label className="eyebrow text-ink-soft">Travellers</label>
                   <input type="number" name="num_travelers" min={1}
                          value={form.num_travelers} onChange={change} className={field} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Destination</label>
+                  <label className="eyebrow text-ink-soft">Destination</label>
                   <select name="destination_id" value={form.destination_id}
                           onChange={change} className={field}>
                     <option value="">Not decided yet</option>
@@ -195,30 +258,30 @@ export default function BookProvider() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Pickup location</label>
+                  <label className="eyebrow text-ink-soft">Pickup location</label>
                   <input name="pickup_location" value={form.pickup_location}
                          onChange={change} placeholder="Hotel or address" className={field} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Drop-off location</label>
+                  <label className="eyebrow text-ink-soft">Drop-off location</label>
                   <input name="dropoff_location" value={form.dropoff_location}
                          onChange={change} className={field} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Notes</label>
-                  <textarea name="notes" rows={3} value={form.notes}
-                            onChange={change} className={field} />
+                  <label className="eyebrow text-ink-soft">Notes</label>
+                  <textarea name="notes" rows={3} value={form.notes} onChange={change}
+                            placeholder="Dietary needs, mobility requirements, anything else…"
+                            className={field} />
                 </div>
               </div>
             </div>
 
-            {/* Optionally add the other provider type */}
-            <div className="rounded-xl border border-sand-300 bg-white p-5">
-              <h2 className="font-semibold">
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <h2 className="font-display text-lg font-semibold">
                 Add a {otherType.toLowerCase()} too?
               </h2>
-              <p className="mt-1 text-sm text-ink/60">
-                Optional — you choose who, and you can always book separately later.
+              <p className="mt-1 text-sm text-ink-soft">
+                Optional. You choose who — Roamie never assigns anyone.
               </p>
 
               <select
@@ -239,32 +302,34 @@ export default function BookProvider() {
               </select>
 
               {second && (
-                <p className="mt-2 text-xs text-brand-700">
-                  Adding {second.full_name}. You chose this — nothing was assigned.
+                <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+                  Adding {second.full_name}. Both providers will see your itinerary.
                 </p>
               )}
             </div>
 
-            <div className="rounded-xl border border-sand-300 bg-white p-5">
-              <h2 className="font-semibold">Price</h2>
-              <div className="mt-3 space-y-2 text-sm">
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <h2 className="font-display text-lg font-semibold">Price</h2>
+              <div className="mt-4 space-y-2.5 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-ink/60">
+                  <span className="text-ink-soft">
                     {provider.full_name} × {days} day{days > 1 ? "s" : ""}
                   </span>
                   <span>{primaryCost.toLocaleString()}</span>
                 </div>
                 {second && (
                   <div className="flex justify-between">
-                    <span className="text-ink/60">
+                    <span className="text-ink-soft">
                       {second.full_name} × {days} day{days > 1 ? "s" : ""}
                     </span>
                     <span>{secondCost.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex justify-between border-t border-sand-300 pt-2 text-base font-semibold">
-                  <span>Total</span>
-                  <span className="text-brand-600">LKR {total.toLocaleString()}</span>
+                <div className="flex items-baseline justify-between border-t border-sand-200 pt-3">
+                  <span className="text-ink-soft">Total</span>
+                  <span className="font-display text-2xl font-bold text-brand-600">
+                    LKR {total.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -272,72 +337,80 @@ export default function BookProvider() {
             <button
               onClick={createBooking}
               disabled={busy || !form.start_date}
-              className="w-full rounded-lg bg-brand-600 py-3 font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+              className="w-full rounded-full bg-brand-600 py-3.5 font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
             >
               {busy ? "Creating booking…" : "Continue to payment"}
             </button>
           </div>
         )}
 
-        {/* Step 2 */}
+        {/* ---------- STEP 2 ---------- */}
         {step === 1 && intent && (
-          <div className="mt-8 space-y-6">
-            <div className="rounded-xl border border-sand-300 bg-white p-5">
-              <h2 className="font-semibold">Payment</h2>
-              <p className="mt-1 text-sm text-ink/60">
-                Reference <span className="font-mono">{booking.reference}</span>
-              </p>
-              <div className="mt-5 flex items-baseline justify-between border-t border-sand-300 pt-4">
-                <span className="text-sm text-ink/60">Amount due</span>
-                <span className="text-2xl font-semibold text-brand-600">
+          <div className="mt-8 space-y-5">
+            <div className="rounded-2xl border border-sand-200 bg-white p-6">
+              <h2 className="font-display text-lg font-semibold">Payment</h2>
+              <p className="mt-1 font-mono text-sm text-ink-soft">{booking.reference}</p>
+
+              <div className="mt-6 flex items-baseline justify-between border-t border-sand-200 pt-5">
+                <span className="text-sm text-ink-soft">Amount due</span>
+                <span className="font-display text-3xl font-bold text-brand-600">
                   {intent.currency} {Number(intent.amount).toLocaleString()}
                 </span>
               </div>
-              <div className="mt-5 rounded-lg bg-sand-100 p-4 text-sm text-ink/70">
-                <p className="font-medium text-ink">Demo payment</p>
-                <p className="mt-1">
+
+              <div className="mt-5 rounded-xl bg-sand-50 p-4 text-sm">
+                <p className="font-medium">Demo payment</p>
+                <p className="mt-1 text-ink-soft">
                   Simulated gateway — no card details, no money moves. A real payment
-                  record is still written.
+                  record is written, and the amount is added to your budget.
                 </p>
               </div>
+
               <button
                 onClick={pay}
                 disabled={busy}
-                className="mt-5 w-full rounded-lg bg-brand-600 py-3 font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                className="mt-5 w-full rounded-full bg-brand-600 py-3.5 font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
               >
-                {busy ? "Processing…" : "Pay now"}
+                {busy ? "Processing…" : `Pay ${intent.currency} ${Number(intent.amount).toLocaleString()}`}
               </button>
             </div>
-            <button onClick={() => setStep(0)} className="text-sm text-ink/60 hover:underline">
-              ← Back
+
+            <button onClick={() => setStep(0)} className="text-sm text-ink-soft hover:underline">
+              ← Back to details
             </button>
           </div>
         )}
 
-        {/* Step 3 */}
+        {/* ---------- STEP 3 ---------- */}
         {step === 2 && (
-          <div className="mt-10 rounded-xl border border-sand-300 bg-white p-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 text-2xl text-brand-600">
+          <div className="mt-10 rounded-2xl border border-sand-200 bg-white p-10 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-3xl text-brand-600">
               ✓
             </div>
-            <h1 className="mt-4 text-2xl font-semibold">Booking confirmed</h1>
-            <p className="mt-2 text-ink/70">
+            <h1 className="headline mt-5 text-3xl">Booking confirmed</h1>
+            <p className="mt-3 text-ink-soft">
               {provider.full_name}
               {second && ` and ${second.full_name}`} from{" "}
               {new Date(form.start_date).toLocaleDateString("en-GB", {
                 day: "numeric", month: "long", year: "numeric",
               })}
             </p>
-            <p className="mt-3 text-sm text-ink/55">
-              Reference <span className="font-mono">{booking.reference}</span>
-            </p>
-            <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <p className="mt-3 font-mono text-sm text-ink-soft">{booking.reference}</p>
+
+            {plan && (
+              <p className="mx-auto mt-5 max-w-sm rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">
+                Your itinerary “{plan.title}” has been shared with{" "}
+                {second ? "both providers" : provider.full_name.split(" ")[0]}.
+              </p>
+            )}
+
+            <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link to="/dashboard"
-                    className="rounded-lg bg-brand-600 px-6 py-2.5 font-medium text-white hover:bg-brand-700">
-                View my bookings
+                    className="rounded-full bg-brand-600 px-6 py-3 font-medium text-white hover:bg-brand-700">
+                View my trips
               </Link>
               <Link to={`/messages/${booking.id}`}
-                    className="rounded-lg border border-sand-300 px-6 py-2.5 font-medium hover:bg-sand-100">
+                    className="rounded-full border border-sand-300 px-6 py-3 font-medium hover:bg-sand-100">
                 Message them
               </Link>
             </div>

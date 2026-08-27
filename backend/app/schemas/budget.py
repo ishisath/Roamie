@@ -60,3 +60,16 @@ class BudgetSummary(BudgetOut):
     days_total: int | None = None
     by_category: list[CategoryTotal] = []
     expenses: list[ExpenseOut] = []
+
+class ExpenseOut(BaseModel):
+    id: UUID
+    category: str
+    amount: Decimal
+    note: str | None = None
+    spent_on: date
+    booking_id: UUID | None = None
+    model_config = {"from_attributes": True}
+
+    @property
+    def is_automatic(self) -> bool:
+        return self.booking_id is not None

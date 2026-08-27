@@ -86,3 +86,83 @@ def check_thresholds(db: Session, budget: TripBudget, before: float, after: floa
             notification_service.notify(
                 db, budget.traveler_id, "BUDGET_ALERT", title, body, f"/budget/{budget.id}"
             )
+
+from datetime import date as date_type
+from uuid import UUID
+
+from app.core.enums import BookingType, ExpenseCategory, ServiceType
+
+
+CATEGORY_FOR = {
+    ServiceType.PACKAGE: ExpenseCategory.PACKAGE,
+    ServiceType.GUIDE: ExpenseCategory.GUIDE,
+    ServiceType.DRIVER: ExpenseCategory.DRIVER,
+}
+
+
+def active_budget_for(db: Session, traveler_id, on_date: date_type) -> TripBudget | None:
+    """Find the budget that covers this date, else the most recent one."""
+    dated = (db.query(TripBudget)
+             .filter(TripBudget.traveler_id == traveler_id,
+                     TripBudget.start_date <= on_date,
+                     TripBudget.end_date >= on_date)
+             .order_by(TripBudget.created_at.desc()).first())
+    if dated:
+        return dated
+
+    return (db.query(TripBudget)
+            .filter(TripBudget.traveler_id == traveler_id)
+            .order_by(TripBudget.created_at.desc()).first())
+
+
+def record_booking_expense(db: Session, booking) -> list[Expense]:
+    """Write one expense line per booking item after payment succeeds."""
+    budget = active_budget_for(db, booking.traveler_id, booking.start_date)
+    if not budget:
+        return []
+
+    # don't double-count if this runs twice
+    if db.query(Expense).filter(Expense.booking_id == booking.id).first():
+        return []
+
+    before = summarise(db, budget)["percent_used"]
+    created = []
+
+    for item in booking.items:
+        category = CATEGORY_FOR.get(item.service_type, ExpenseCategory.OTHER)
+        note = f"{item.service_type.title()} · booking {booking.reference}"
+
+        e = Expense(
+            budget_id=budget.id,
+            traveler_id=booking.traveler_id,
+            category=category,
+            amount=item.amount,
+            note=note,
+            spent_on=booking.start_date,
+            booking_id=booking.id,
+        )
+        db.add(e)
+        created.append(e)
+
+    db.flush()
+
+    after = summarise(db, budget)["percent_used"]
+    check_thresholds(db, budget, before, after)
+
+    notification_service.notify(
+        db, booking.traveler_id, "BUDGET_UPDATED",
+        "Added to your budget",
+        f"{booking.currency} {booking.total_amount:,.0f} from booking "
+        f"{booking.reference} was added to “{budget.title}”.",
+        f"/budget",
+    )
+
+    return created
+
+
+def remove_booking_expense(db: Session, booking) -> int:
+    """Reverse the expense lines if a booking is refunded or cancelled."""
+    rows = db.query(Expense).filter(Expense.booking_id == booking.id).all()
+    for r in rows:
+        db.delete(r)
+    return len(rows)

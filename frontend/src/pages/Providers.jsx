@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { providersApi } from "../api/endpoints";
+import { providersApi, aiApi } from "../api/endpoints";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { useTilt } from "../hooks/useTilt";
 
 const LANGUAGES = ["English", "Sinhala", "Tamil", "German", "French"];
 
-function ProviderCard({ p, kind }) {
+function ProviderCard({ p, planId }) {
   const tilt = useTilt(6);
+  const to = planId
+    ? `/providers/${p.user_id}?plan=${planId}`
+    : `/providers/${p.user_id}`;
 
   return (
     <Link
-      to={`/providers/${p.user_id}`}
+      to={to}
       ref={tilt.ref}
       onMouseMove={tilt.onMouseMove}
       onMouseLeave={tilt.onMouseLeave}
@@ -97,14 +100,22 @@ function ProviderCard({ p, kind }) {
 export default function Providers({ kind }) {
   const [params, setParams] = useSearchParams();
   const [list, setList] = useState([]);
+  const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const q = params.get("q") || "";
   const language = params.get("language") || "";
   const sort = params.get("sort") || "rating";
   const minSeats = params.get("min_seats") || "";
+  const planId = params.get("plan");
 
   const [search, setSearch] = useState(q);
+
+  useEffect(() => {
+    if (planId) {
+      aiApi.planDetail(planId).then((r) => setPlan(r.data)).catch(() => {});
+    }
+  }, [planId]);
 
   useEffect(() => {
     setLoading(true);
@@ -169,6 +180,24 @@ export default function Providers({ kind }) {
       </section>
 
       <main className="mx-auto max-w-7xl px-6 py-12">
+        {plan && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-saffron-500/30 bg-saffron-500/10 px-6 py-4">
+            <div>
+              <p className="eyebrow text-saffron-400">Booking for your itinerary</p>
+              <p className="mt-1 font-display font-semibold text-white">{plan.title}</p>
+              <p className="mt-0.5 text-sm text-white/60">
+                Whoever you pick will see this plan once the booking is confirmed.
+              </p>
+            </div>
+            <Link
+              to={`/plans/${planId}`}
+              className="rounded-full border border-white/20 px-5 py-2 text-sm text-white transition hover:bg-white/10"
+            >
+              View itinerary
+            </Link>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => update("language", "")}
@@ -228,7 +257,9 @@ export default function Providers({ kind }) {
           </p>
         ) : (
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {list.map((p) => <ProviderCard key={p.user_id} p={p} kind={kind} />)}
+            {list.map((p) => (
+              <ProviderCard key={p.user_id} p={p} planId={planId} />
+            ))}
           </div>
         )}
       </main>

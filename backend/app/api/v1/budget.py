@@ -1,4 +1,3 @@
-from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -79,6 +78,9 @@ def update_expense(expense_id: UUID, data: ExpenseCreate,
     e = db.query(Expense).filter(Expense.id == expense_id).first()
     if not e or e.traveler_id != user.id:
         raise HTTPException(404, "Expense not found")
+    if e.booking_id:
+        raise HTTPException(400, "Expenses from Roamie bookings can't be edited")
+
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(e, k, v)
     db.commit()
@@ -93,5 +95,10 @@ def delete_expense(expense_id: UUID,
     e = db.query(Expense).filter(Expense.id == expense_id).first()
     if not e or e.traveler_id != user.id:
         raise HTTPException(404, "Expense not found")
+    if e.booking_id:
+        raise HTTPException(
+            400,
+            "This came from a Roamie booking. Cancel or refund the booking to remove it.",
+        )
     db.delete(e)
     db.commit()

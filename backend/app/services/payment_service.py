@@ -81,6 +81,9 @@ def confirm_payment(db: Session, traveler: User, payment_id, intent_id) -> Payme
     booking.payment_status = PaymentStatus.SUCCESS
     booking_service.confirm_booking(db, booking)
 
+    from app.services import budget_service
+    budget_service.record_booking_expense(db, booking)
+
     notification_service.notify(
         db, booking.traveler_id, "BOOKING_CONFIRMED",
         "Booking confirmed",
@@ -125,6 +128,9 @@ def refund_payment(db: Session, payment_id, amount, reason) -> Refund:
     payment.status = PaymentStatus.REFUNDED
     booking = db.query(Booking).filter(Booking.id == payment.booking_id).first()
     booking.payment_status = PaymentStatus.REFUNDED
+
+    from app.services import budget_service
+    budget_service.remove_booking_expense(db, booking)
 
     notification_service.notify(
         db, payment.traveler_id, "REFUND_ISSUED", "Refund processed",
