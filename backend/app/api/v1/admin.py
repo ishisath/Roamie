@@ -158,10 +158,13 @@ def pending_guides(status: str = VerificationStatus.PENDING,
     return [{
         "profile_id": str(p.id), "user_id": str(u.id),
         "full_name": u.full_name, "email": u.email, "phone": u.phone,
+        "country": u.country, "avatar_url": u.avatar_url,
         "bio": p.bio, "years_experience": p.years_experience,
         "languages": p.languages, "specializations": p.specializations,
         "qualifications": p.qualifications, "certifications": p.certifications,
-        "verification_docs": p.verification_docs,
+        "sltda_registered": p.sltda_registered, "sltda_number": p.sltda_number,
+        "daily_rate": float(p.daily_rate) if p.daily_rate else None,
+        "verification_docs": p.verification_docs or [],
         "status": p.verification_status,
     } for p, u in rows]
 
@@ -175,13 +178,14 @@ def pending_drivers(status: str = VerificationStatus.PENDING,
     return [{
         "profile_id": str(p.id), "user_id": str(u.id),
         "full_name": u.full_name, "email": u.email, "phone": u.phone,
+        "country": u.country, "avatar_url": u.avatar_url,
         "bio": p.bio, "years_experience": p.years_experience,
         "languages": p.languages, "license_no": p.license_no,
-        "license_expiry": p.license_expiry,
-        "verification_docs": p.verification_docs,
+        "license_expiry": str(p.license_expiry) if p.license_expiry else None,
+        "daily_rate": float(p.daily_rate) if p.daily_rate else None,
+        "verification_docs": p.verification_docs or [],
         "status": p.verification_status,
     } for p, u in rows]
-
 
 @router.patch("/verifications/guides/{profile_id}")
 def verify_guide(profile_id: UUID, data: VerificationAction,

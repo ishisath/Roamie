@@ -83,6 +83,7 @@ export const availabilityApi = {
   mine: () => client.get("/availability/me"),
   set: (dates, status) => client.put("/availability/me", { dates, status }),
   provider: (userId) => client.get(`/availability/provider/${userId}`),
+  extend: (days) => client.post("/availability/me/extend", null, { params: { days } }),
 };
 
 export const vehiclesApi = {
@@ -168,4 +169,12 @@ export const adminApi = {
 export const weatherApi = {
   forBooking: (bookingId) => client.get(`/weather/booking/${bookingId}`),
   forDestination: (slug) => client.get(`/weather/destination/${slug}`),
+};
+
+export const profileApi = {
+  me: () => client.get("/profile/me"),
+  updateGuide: (data) => client.patch("/profile/me/guide", data),
+  updateDriver: (data) => client.patch("/profile/me/driver", data),
+  updateAccount: (data) => client.patch("/profile/me/account", data),
+  submit: () => client.post("/profile/me/submit"),
 };

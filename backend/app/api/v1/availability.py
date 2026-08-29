@@ -81,3 +81,27 @@ def set_availability(data: AvailabilitySet,
 
     db.commit()
     return updated
+
+@router.post("/me/extend")
+def extend_availability(days: int = Query(90, le=365),
+                        user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    """Open up more dates, from today forward."""
+    if user.role not in (Role.GUIDE, Role.DRIVER):
+        raise HTTPException(403, "Provider account required")
+
+    today = date.today()
+    existing = {a.date for a in db.query(Availability)
+                .filter(Availability.provider_id == user.id,
+                        Availability.date >= today).all()}
+
+    added = 0
+    for i in range(days):
+        d = today + timedelta(days=i)
+        if d not in existing:
+            db.add(Availability(provider_id=user.id, date=d,
+                                status=AvailabilityStatus.AVAILABLE))
+            added += 1
+
+    db.commit()
+    return {"added": added}

@@ -11,6 +11,7 @@ import { comparePeriods, bookingFunnel, cancellationRate, avgBookingValue,
 import SuggestionForm from "../components/SuggestionForm";
 import BidBoard from "../components/BidBoard";
 import ItineraryPreview from "../components/ItineraryPreview";
+import { profileApi } from "../api/endpoints";
 
 const TABS = ["Overview", "Packages", "Bookings", "Requests", "Availability", "Suggest"];
 
@@ -35,12 +36,14 @@ export default function GuideDashboard() {
   const [form, setForm] = useState(emptyPackage);
   const [error, setError] = useState("");
   const [plans, setPlans] = useState({});
+  const [profile, setProfile] = useState(null);
 
   const loadAll = () => {
     packagesApi.mine().then((r) => setPackages(r.data)).catch(() => {});
     bookingsApi.list().then((r) => setBookings(r.data)).catch(() => {});
     paymentsApi.earnings().then((r) => setEarnings(r.data)).catch(() => {});
     availabilityApi.mine().then((r) => setAvailability(r.data)).catch(() => {});
+    profileApi.me().then((r) => setProfile(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -166,6 +169,30 @@ export default function GuideDashboard() {
       {/* ---------- OVERVIEW ---------- */}
       {tab === "Overview" && (
         <div className="space-y-5">
+                    {profile && profile.verification_status !== "APPROVED" && (
+            <Link
+              to="/profile"
+              className="flex items-center justify-between rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-5 transition hover:bg-saffron-500/15"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-white">
+                  {profile.completeness === 100
+                    ? "Ready to submit for verification"
+                    : `Your profile is ${profile.completeness}% complete`}
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  {profile.verification_status === "PENDING" && profile.completeness === 100
+                    ? "An admin is reviewing your application."
+                    : "You can't take bookings until an admin verifies you."}
+                </p>
+                <div className="mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-saffron-500"
+                       style={{ width: `${profile.completeness}%` }} />
+                </div>
+              </div>
+              <span className="ml-4 shrink-0 text-saffron-400">→</span>
+            </Link>
+          )}
           {awaitingResponse > 0 && (
             <button
               onClick={() => setTab("Bookings")}

@@ -27,6 +27,12 @@ class Settings:
     STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
     PAYMENT_PROVIDER = os.getenv("PAYMENT_PROVIDER", "MOCK")
 
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM = os.getenv("EMAIL_FROM", "Roamie <onboarding@resend.dev>")
+    EMAIL_ENABLED = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    EMAIL_OVERRIDE_TO = os.getenv("EMAIL_OVERRIDE_TO", "")
+
     PLATFORM_COMMISSION = 0.10
 
 

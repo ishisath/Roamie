@@ -28,10 +28,15 @@ function ProviderCard({ p, planId }) {
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-saffron-500/10 blur-2xl opacity-0 transition group-hover:opacity-100" />
 
       <div className="relative flex items-start gap-4">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full
-                         bg-gradient-to-br from-brand-500 to-brand-700 font-display text-xl
-                         font-bold text-white">
-          {p.full_name.charAt(0)}
+                <span className="relative flex h-14 w-14 shrink-0 items-center justify-center
+                         overflow-hidden rounded-full bg-gradient-to-br from-brand-500
+                         to-brand-700 font-display text-xl font-bold text-white">
+          {p.avatar_url ? (
+            <img src={p.avatar_url} alt=""
+                 className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            p.full_name.charAt(0)
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

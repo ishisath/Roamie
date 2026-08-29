@@ -1,20 +1,24 @@
+from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.enums import Role
+from app.core.enums import AvailabilityStatus, Role
 from app.core.security import (create_access_token, create_refresh_token,
                                decode_token, hash_password, verify_password)
 from app.db.session import get_db
+from app.models.package import Availability
 from app.models.user import DriverProfile, GuideProfile, TravelerProfile, User
 from app.schemas.auth import (LoginIn, ProfileUpdate, RefreshIn, RegisterIn,
                               TokenOut, UserOut)
+from app.services import email_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 PUBLIC_ROLES = {Role.TRAVELER, Role.GUIDE, Role.DRIVER}
+CALENDAR_DAYS = 90
 
 
 def _tokens_for(user: User) -> TokenOut:
@@ -32,7 +36,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
         raise HTTPException(400, "Invalid role")
 
     if db.query(User).filter(User.email == data.email.lower()).first():
-        raise HTTPException(409, "Email already registered")
+        raise HTTPException(409, "That email is already registered")
 
     user = User(
         email=data.email.lower(),
@@ -47,13 +51,44 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 
     if role == Role.TRAVELER:
         db.add(TravelerProfile(user_id=user.id))
-    elif role == Role.GUIDE:
-        db.add(GuideProfile(user_id=user.id))
-    elif role == Role.DRIVER:
-        db.add(DriverProfile(user_id=user.id))
+    else:
+        if role == Role.GUIDE:
+            db.add(GuideProfile(user_id=user.id))
+        else:
+            db.add(DriverProfile(user_id=user.id))
+
+        # open a calendar so travellers can see availability straight away
+        today = date.today()
+        for i in range(CALENDAR_DAYS):
+            db.add(Availability(
+                provider_id=user.id,
+                date=today + timedelta(days=i),
+                status=AvailabilityStatus.AVAILABLE,
+            ))
 
     db.commit()
     db.refresh(user)
+
+    # welcome email — never blocks registration
+    if role == Role.TRAVELER:
+        email_service.send(
+            to=user.email,
+            subject="Welcome to Roamie",
+            title=f"Welcome, {user.full_name.split()[0]}",
+            body="Browse destinations, pick your own guide and driver, or let the "
+                 "AI planner draft an itinerary. Roamie never chooses for you.",
+            cta_text="Start planning", cta_path="/destinations",
+        )
+    else:
+        email_service.send(
+            to=user.email,
+            subject="Your Roamie provider account",
+            title=f"Thanks for joining, {user.full_name.split()[0]}",
+            body="Complete your profile and an admin will review it. We'll email "
+                 "you as soon as you're verified and can start taking bookings.",
+            cta_text="Complete your profile", cta_path="/profile",
+        )
+
     return _tokens_for(user)
 
 
@@ -61,9 +96,9 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 def login(data: LoginIn, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email.lower()).first()
     if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(401, "Incorrect email or password")
+        raise HTTPException(401, "That email and password don't match")
     if not user.is_active:
-        raise HTTPException(403, "Account is deactivated")
+        raise HTTPException(403, "This account has been suspended")
     return _tokens_for(user)
 
 

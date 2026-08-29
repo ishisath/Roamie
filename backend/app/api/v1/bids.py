@@ -52,12 +52,14 @@ def _request_out(db: Session, r: TripRequest, with_bids: bool = False) -> TripRe
     bids = db.query(Bid).filter(Bid.request_id == r.id).all()
 
     return TripRequestOut(
-        **{k: getattr(r, k) for k in
-           ("id", "traveler_id", "kind", "destination_id", "pickup_location",
+                **{k: getattr(r, k) for k in
+           ("id", "traveler_id", "kind", "destination_id", "destination_text",
+            "pickup_location", "pickup_lat", "pickup_lng",
             "start_date", "end_date", "num_people", "vehicle_requirements",
             "tourist_requirements", "budget_min", "budget_max", "notes", "status")},
+        
         traveler_name=traveler.full_name if traveler else None,
-        destination_name=dest.name if dest else None,
+        destination_name=dest.name if dest else r.destination_text,
         bid_count=len(bids),
         bids=[_bid_out(db, b) for b in bids] if with_bids else [],
     )

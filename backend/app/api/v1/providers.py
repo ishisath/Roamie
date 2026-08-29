@@ -33,7 +33,7 @@ def list_guides(q: str | None = None,
                 specialization: str | None = None,
                 min_rating: float | None = None,
                 min_experience: int | None = None,
-                sort: str = Query("rating", pattern="^(rating|experience|name)$"),
+                sort: str = Query("rating", pattern="^(rating|experience|name|rate_low)$"),
                 db: Session = Depends(get_db)):
     query = (db.query(GuideProfile, User)
              .join(User, User.id == GuideProfile.user_id)
@@ -56,15 +56,18 @@ def list_guides(q: str | None = None,
         "rating": GuideProfile.rating_avg.desc(),
         "experience": GuideProfile.years_experience.desc(),
         "name": User.full_name.asc(),
+        "rate_low": GuideProfile.daily_rate.asc(),
     }[sort]
 
     rows = query.order_by(order).limit(50).all()
 
     return [ProviderCard(
-        user_id=u.id, full_name=u.full_name, avatar_url=u.avatar_url,
-        country=u.country, bio=p.bio, years_experience=p.years_experience,
+        user_id=u.id, full_name=u.full_name, role=u.role,
+        avatar_url=u.avatar_url, country=u.country,
+        bio=p.bio, years_experience=p.years_experience,
         languages=p.languages, specializations=p.specializations,
         rating_avg=p.rating_avg, rating_count=p.rating_count,
+        daily_rate=p.daily_rate,
         is_verified=True,
     ) for p, u in rows]
 
@@ -75,7 +78,7 @@ def list_drivers(q: str | None = None,
                  min_seats: int | None = None,
                  is_ac: bool | None = None,
                  min_rating: float | None = None,
-                 sort: str = Query("rating", pattern="^(rating|experience|name)$"),
+                 sort: str = Query("rating", pattern="^(rating|experience|name|rate_low)$"),
                  db: Session = Depends(get_db)):
     query = (db.query(DriverProfile, User)
              .join(User, User.id == DriverProfile.user_id)
@@ -94,6 +97,7 @@ def list_drivers(q: str | None = None,
         "rating": DriverProfile.rating_avg.desc(),
         "experience": DriverProfile.years_experience.desc(),
         "name": User.full_name.asc(),
+        "rate_low": DriverProfile.daily_rate.asc(),
     }[sort]
 
     rows = query.order_by(order).limit(50).all()
@@ -104,7 +108,7 @@ def list_drivers(q: str | None = None,
                     .filter(Vehicle.driver_id == p.id,
                             Vehicle.is_active.is_(True)).all())
 
-        # vehicle filters apply to the driver's fleet
+        # vehicle filters apply across the driver's fleet
         if min_seats and not any(v.seats >= min_seats for v in vehicles):
             continue
         if is_ac is not None and not any(v.is_ac == is_ac for v in vehicles):
@@ -119,12 +123,16 @@ def list_drivers(q: str | None = None,
                 summary += f" (+{len(vehicles) - 1} more)"
 
         out.append(ProviderCard(
-            user_id=u.id, full_name=u.full_name, avatar_url=u.avatar_url,
-            country=u.country, bio=p.bio, years_experience=p.years_experience,
-            languages=p.languages, rating_avg=p.rating_avg,
-            rating_count=p.rating_count, is_verified=True,
+            user_id=u.id, full_name=u.full_name, role=u.role,
+            avatar_url=u.avatar_url, country=u.country,
+            bio=p.bio, years_experience=p.years_experience,
+            languages=p.languages,
+            rating_avg=p.rating_avg, rating_count=p.rating_count,
+            daily_rate=p.daily_rate,
+            is_verified=True,
             vehicle_summary=summary,
         ))
+
     return out
 
 
@@ -134,10 +142,16 @@ def provider_profile(user_id: UUID, db: Session = Depends(get_db)):
     if not user or user.role not in (Role.GUIDE, Role.DRIVER):
         raise HTTPException(404, "Provider not found")
 
-    base = dict(user_id=user.id, full_name=user.full_name,
-                avatar_url=user.avatar_url, country=user.country,
-                available_dates=_free_dates(db, user.id))
+    base = dict(
+        user_id=user.id,
+        full_name=user.full_name,
+        role=user.role,
+        avatar_url=user.avatar_url,
+        country=user.country,
+        available_dates=_free_dates(db, user.id),
+    )
 
+    # ---------- guide ----------
     if user.role == Role.GUIDE:
         p = db.query(GuideProfile).filter(GuideProfile.user_id == user.id).first()
         if not p or p.verification_status != VerificationStatus.APPROVED:
@@ -148,10 +162,16 @@ def provider_profile(user_id: UUID, db: Session = Depends(get_db)):
                             Package.status == ContentStatus.ACTIVE).all())
 
         return ProviderProfile(
-            **base, bio=p.bio, years_experience=p.years_experience,
-            languages=p.languages, specializations=p.specializations,
-            qualifications=p.qualifications, certifications=p.certifications,
-            rating_avg=p.rating_avg, rating_count=p.rating_count,
+            **base,
+            bio=p.bio,
+            years_experience=p.years_experience,
+            languages=p.languages,
+            specializations=p.specializations,
+            qualifications=p.qualifications,
+            certifications=p.certifications,
+            rating_avg=p.rating_avg,
+            rating_count=p.rating_count,
+            daily_rate=p.daily_rate,
             is_verified=True,
             packages=[PackageBrief(
                 id=pk.id, title=pk.title, duration_days=pk.duration_days,
@@ -161,6 +181,7 @@ def provider_profile(user_id: UUID, db: Session = Depends(get_db)):
             ) for pk in packages],
         )
 
+    # ---------- driver ----------
     p = db.query(DriverProfile).filter(DriverProfile.user_id == user.id).first()
     if not p or p.verification_status != VerificationStatus.APPROVED:
         raise HTTPException(404, "Provider not found")
@@ -170,9 +191,14 @@ def provider_profile(user_id: UUID, db: Session = Depends(get_db)):
                         Vehicle.is_active.is_(True)).all())
 
     return ProviderProfile(
-        **base, bio=p.bio, years_experience=p.years_experience,
-        languages=p.languages, license_no=p.license_no,
-        rating_avg=p.rating_avg, rating_count=p.rating_count,
+        **base,
+        bio=p.bio,
+        years_experience=p.years_experience,
+        languages=p.languages,
+        license_no=p.license_no,
+        rating_avg=p.rating_avg,
+        rating_count=p.rating_count,
+        daily_rate=p.daily_rate,
         is_verified=True,
         vehicles=[VehicleBrief(
             id=v.id, vehicle_type=v.vehicle_type, model=v.model,

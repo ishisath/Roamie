@@ -82,6 +82,9 @@ class TripRequest(Base, TimestampMixin):
     budget_max = Column(Numeric(10, 2))
     notes = Column(Text)
     status = Column(String(20), default=RequestStatus.OPEN, index=True)
+    destination_text = Column(String(150))
+    pickup_lat = Column(Numeric(9, 6))
+    pickup_lng = Column(Numeric(9, 6))
 
     bids = relationship("Bid", back_populates="request", cascade="all, delete-orphan")
 

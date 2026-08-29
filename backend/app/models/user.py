@@ -20,6 +20,8 @@ class User(Base, TimestampMixin):
     country = Column(String(80))
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    email_notifications = Column(Boolean, default=True, server_default="true", nullable=False)
+    
 
     traveler_profile = relationship("TravelerProfile", back_populates="user", uselist=False)
     guide_profile = relationship("GuideProfile", back_populates="user", uselist=False)
@@ -56,6 +58,8 @@ class GuideProfile(Base, TimestampMixin):
     rating_avg = Column(Numeric(3, 2), default=0)
     rating_count = Column(Integer, default=0)
     daily_rate = Column(Numeric(10, 2), default=0)
+    sltda_registered = Column(Boolean, default=False, server_default="false")
+    sltda_number = Column(String(60))
 
     user = relationship("User", back_populates="guide_profile")
 

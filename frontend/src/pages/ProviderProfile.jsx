@@ -48,8 +48,8 @@ export default function ProviderProfile() {
     );
   }
 
-  const isDriver = p.vehicles?.length > 0 || !p.specializations;
-  const subjectType = isDriver ? "DRIVER" : "GUIDE";
+  const subjectType = p.role || (p.vehicles?.length > 0 ? "DRIVER" : "GUIDE");
+  const isDriver = subjectType === "DRIVER";
 
   const book = () => {
     if (!user) return navigate("/login");
@@ -69,10 +69,16 @@ export default function ProviderProfile() {
 
         <div className="relative mx-auto max-w-5xl px-6 py-16">
           <div className="flex flex-wrap items-start gap-6">
-            <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full
-                             bg-gradient-to-br from-saffron-400 to-saffron-600
-                             font-display text-4xl font-bold text-night-900">
-              {p.full_name.charAt(0)}
+                        <span className="relative flex h-24 w-24 shrink-0 items-center justify-center
+                             overflow-hidden rounded-full bg-gradient-to-br
+                             from-saffron-400 to-saffron-600 font-display text-4xl
+                             font-bold text-night-900">
+              {p.avatar_url ? (
+                <img src={p.avatar_url} alt=""
+                     className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                p.full_name.charAt(0)
+              )}
             </span>
 
             <div className="min-w-0 flex-1">

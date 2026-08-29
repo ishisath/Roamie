@@ -17,6 +17,9 @@ class TripRequestCreate(BaseModel):
     budget_min: Decimal | None = None
     budget_max: Decimal | None = None
     notes: str | None = None
+    destination_text: str | None = None
+    pickup_lat: Decimal | None = None
+    pickup_lng: Decimal | None = None
 
 
 class BidCreate(BaseModel):
@@ -65,3 +68,6 @@ class TripRequestOut(BaseModel):
     status: str
     bid_count: int = 0
     bids: list[BidOut] = []
+    destination_text: str | None = None
+    pickup_lat: Decimal | None = None
+    pickup_lng: Decimal | None = None

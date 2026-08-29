@@ -12,6 +12,7 @@ import SuggestionForm from "../components/SuggestionForm";
 import BidBoard from "../components/BidBoard";
 import ImageUpload from "../components/ImageUpload";
 import ItineraryPreview from "../components/ItineraryPreview";
+import { profileApi } from "../api/endpoints";
 
 const TABS = ["Overview", "Trips", "Requests", "Vehicles", "Availability", "Suggest"];
 
@@ -41,12 +42,16 @@ export default function DriverDashboard() {
   const [vehiclePhotos, setVehiclePhotos] = useState([]);
   const [error, setError] = useState("");
   const [plans, setPlans] = useState({});
+  const [profile, setProfile] = useState(null);
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [editPhotos, setEditPhotos] = useState([]);
 
   const loadAll = () => {
     bookingsApi.list().then((r) => setBookings(r.data)).catch(() => {});
     paymentsApi.earnings().then((r) => setEarnings(r.data)).catch(() => {});
     vehiclesApi.mine().then((r) => setVehicles(r.data)).catch(() => {});
     availabilityApi.mine().then((r) => setAvailability(r.data)).catch(() => {});
+    profileApi.me().then((r) => setProfile(r.data)).catch(() => {});
   };
 
   useEffect(() => { loadAll(); }, []);
@@ -83,6 +88,31 @@ export default function DriverDashboard() {
     } catch (err) {
       setError(err.response?.data?.detail ||
         "Couldn't add the vehicle. Check the registration number isn't already used.");
+    }
+  };
+
+  const startEditVehicle = (v) => {
+    setEditingVehicle(v);
+    setEditPhotos(v.photos || []);
+  };
+
+  const saveVehiclePhotos = async () => {
+    setError("");
+    try {
+      await vehiclesApi.update(editingVehicle.id, {
+        vehicle_type: editingVehicle.vehicle_type,
+        model: editingVehicle.model,
+        reg_no: editingVehicle.reg_no,
+        seats: editingVehicle.seats,
+        is_ac: editingVehicle.is_ac,
+        luggage_capacity: editingVehicle.luggage_capacity,
+        facilities: editingVehicle.facilities || [],
+        photos: editPhotos,
+      });
+      setEditingVehicle(null);
+      loadAll();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Couldn't update the photos.");
     }
   };
 
@@ -191,6 +221,30 @@ export default function DriverDashboard() {
       {/* ---------- OVERVIEW ---------- */}
       {tab === "Overview" && (
         <div className="space-y-5">
+                    {profile && profile.verification_status !== "APPROVED" && (
+            <Link
+              to="/profile"
+              className="flex items-center justify-between rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-5 transition hover:bg-saffron-500/15"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-white">
+                  {profile.completeness === 100
+                    ? "Ready to submit for verification"
+                    : `Your profile is ${profile.completeness}% complete`}
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  {profile.verification_status === "PENDING" && profile.completeness === 100
+                    ? "An admin is reviewing your application."
+                    : "You can't take bookings until an admin verifies you."}
+                </p>
+                <div className="mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-saffron-500"
+                       style={{ width: `${profile.completeness}%` }} />
+                </div>
+              </div>
+              <span className="ml-4 shrink-0 text-saffron-400">→</span>
+            </Link>
+          )}
           {awaitingResponse > 0 && (
             <button
               onClick={() => setTab("Trips")}
@@ -581,6 +635,38 @@ export default function DriverDashboard() {
                     >
                       Remove vehicle
                     </button>
+                                        <div className="mt-4 flex gap-4">
+                      <button
+                        onClick={() => startEditVehicle(v)}
+                        className="text-xs text-saffron-400 hover:underline"
+                      >
+                        {v.photos?.length ? "Manage photos" : "Add photos"}
+                      </button>
+                      <button
+                        onClick={() => vehiclesApi.deactivate(v.id).then(loadAll)}
+                        className="text-xs text-white/45 hover:text-red-300"
+                      >
+                        Remove vehicle
+                      </button>
+                    </div>
+
+                    {editingVehicle?.id === v.id && (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                        <ImageUpload value={editPhotos} onChange={setEditPhotos}
+                                     max={4} label="Vehicle photos"
+                                     hint="Travellers see these before they book" />
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={saveVehiclePhotos}
+                                  className="rounded-lg bg-saffron-500 px-4 py-2 text-xs font-medium text-night-900 hover:bg-saffron-400">
+                            Save photos
+                          </button>
+                          <button onClick={() => setEditingVehicle(null)}
+                                  className="rounded-lg border border-white/15 px-4 py-2 text-xs text-white hover:bg-white/10">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -591,40 +677,28 @@ export default function DriverDashboard() {
 
       {/* ---------- AVAILABILITY ---------- */}
       {tab === "Availability" && (
-        <Panel
+                <Panel
           title="Your calendar"
           sub="Click a date to switch it between available and unavailable. Booked dates are locked."
+          action={
+            <button
+              onClick={() => availabilityApi.extend(90).then(() =>
+                availabilityApi.mine().then((r) => setAvailability(r.data))
+              )}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/70 hover:bg-white/10"
+            >
+              Open 90 more days
+            </button>
+          }
         >
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 lg:grid-cols-10">
-            {availability.map((a) => {
-              const booked = a.status === "BOOKED";
-              const free = a.status === "AVAILABLE";
-              return (
-                <button
-                  key={a.id}
-                  disabled={booked}
-                  onClick={() => toggleDate(a.date, a.status)}
-                  className={`rounded-lg border p-2.5 text-xs transition ${
-                    booked
-                      ? "cursor-not-allowed border-saffron-500/40 bg-saffron-500/15 text-saffron-400"
-                      : free
-                      ? "border-white/10 bg-white/5 text-white hover:border-saffron-400"
-                      : "border-white/8 bg-transparent text-white/25 line-through"
-                  }`}
-                >
-                  <span className="block font-display text-base font-bold">
-                    {new Date(a.date).getDate()}
-                  </span>
-                  <span className="block text-[10px] opacity-70">
-                    {new Date(a.date).toLocaleDateString("en-GB", { month: "short" })}
-                  </span>
-                  <span className="mt-1 block text-[9px] uppercase tracking-wide opacity-60">
-                    {booked ? "Booked" : free ? "Free" : "Off"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {availability.length === 0 ? (
+            <p className="py-12 text-center text-sm text-white/40">
+              No dates yet. Open your calendar to start taking bookings.
+            </p>
+          ) : (
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 lg:grid-cols-10">
+            </div>
+          )}
         </Panel>
       )}
 

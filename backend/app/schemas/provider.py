@@ -19,6 +19,7 @@ class ProviderCard(BaseModel):
     is_verified: bool = False
     vehicle_summary: str | None = None
     daily_rate: Decimal | None = None
+    role: str | None = None
 
 
 class VehicleBrief(BaseModel):

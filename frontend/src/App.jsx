@@ -25,6 +25,8 @@ import BookProvider from "./pages/BookProvider";
 import TripRequests from "./pages/TripRequests";
 import BookingDetail from "./pages/BookingDetail";
 import TripPlans from "./pages/TripPlans";
+import ProviderSetup from "./pages/ProviderSetup";
+
 
 export default function App() {
   return (
@@ -113,6 +115,10 @@ export default function App() {
 <Route
   path="/bookings/:id"
   element={<ProtectedRoute><BookingDetail /></ProtectedRoute>}
+/>
+<Route
+  path="/profile"
+  element={<ProtectedRoute roles={["GUIDE", "DRIVER"]}><ProviderSetup /></ProtectedRoute>}
 />
 
 

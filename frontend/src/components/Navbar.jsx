@@ -50,6 +50,10 @@ export default function Navbar({ overlay = false }) {
           )}
           {user?.role === "TRAVELER" && <Link to="/budget" className={link}>Budget</Link>}
           {user && <Link to="/messages" className={link}>Messages</Link>}
+
+                    {(user?.role === "GUIDE" || user?.role === "DRIVER") && (
+            <Link to="/profile" className={link}>My profile</Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-3 text-sm">

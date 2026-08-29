@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { bidsApi, destinationsApi } from "../api/endpoints";
 import Navbar from "../components/Navbar";
+import LocationInput from "../components/LocationInput";
 
 const empty = {
-  kind: "DRIVER", destination_id: "", pickup_location: "",
+  kind: "DRIVER", destination_id: "", destination_text: "",
+  pickup_location: "", pickup_lat: null, pickup_lng: null,
   start_date: "", end_date: "", num_people: 2,
   vehicle_requirements: "", tourist_requirements: "",
   budget_min: "", budget_max: "", notes: "",
@@ -40,6 +42,9 @@ export default function TripRequests() {
         num_people: Number(form.num_people),
         budget_min: form.budget_min ? Number(form.budget_min) : null,
         budget_max: form.budget_max ? Number(form.budget_max) : null,
+                destination_text: form.destination_id ? null : (form.destination_text || null),
+        pickup_lat: form.pickup_lat,
+        pickup_lng: form.pickup_lng,
       });
       setForm(empty);
       setShowForm(false);
@@ -103,20 +108,37 @@ export default function TripRequests() {
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
+                            <div>
                 <label className="text-sm font-medium">Destination</label>
                 <select name="destination_id" value={form.destination_id}
                         onChange={change} className={field}>
-                  <option value="">Not decided</option>
+                  <option value="">Somewhere else — I'll type it</option>
                   {destinations.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
+
+                {!form.destination_id && (
+                  <input
+                    name="destination_text"
+                    value={form.destination_text}
+                    onChange={change}
+                    placeholder="Where do you want to go?"
+                    className={`${field} mt-2`}
+                  />
+                )}
               </div>
-              <div>
+                            <div>
                 <label className="text-sm font-medium">Pickup location</label>
-                <input name="pickup_location" value={form.pickup_location}
-                       onChange={change} className={field} />
+                <LocationInput
+                  value={form.pickup_location}
+                  onChange={(v) => setForm((f) => ({ ...f, pickup_location: v }))}
+                  onCoords={({ lat, lng }) =>
+                    setForm((f) => ({ ...f, pickup_lat: lat, pickup_lng: lng }))
+                  }
+                  placeholder="Hotel, address, or use 📍"
+                  className={`${field} flex-1`}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Start date</label>
